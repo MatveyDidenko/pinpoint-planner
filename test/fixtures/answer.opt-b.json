@@ -1,0 +1,12 @@
+{
+  "questionId": "m-1",
+  "md": "The timer reschedules itself after every successful refresh, so a **sleeping laptop** wakes up with at most one missed renewal and recovers on the next tick.",
+  "diagram": {
+    "nodes": [
+      { "id": "wake", "label": "Laptop wakes", "status": "external" },
+      { "id": "timer", "label": "Refresh timer", "status": "new" },
+      { "id": "refresh", "label": "Refresh call", "status": "new" }
+    ],
+    "edges": [{ "from": "wake", "to": "timer", "label": "overdue" }, { "from": "timer", "to": "refresh" }]
+  }
+}

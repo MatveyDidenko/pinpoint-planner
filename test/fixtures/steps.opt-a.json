@@ -1,0 +1,20 @@
+{
+  "optionId": "opt-a",
+  "steps": [
+    {
+      "title": "Detect a 401 in the fetch wrapper and pause the failed request",
+      "touches": ["src/api/client.ts"],
+      "test": "A mocked 401 response makes the wrapper call the refresh function once."
+    },
+    {
+      "title": "Add a refresh call that swaps in the renewed token pair",
+      "touches": ["src/auth/session.ts", "src/auth/storage.ts"],
+      "test": "After a successful refresh the session store and storage both hold the new tokens."
+    },
+    {
+      "title": "Replay the paused request once through the existing retry helper",
+      "touches": ["src/api/client.ts", "src/api/retry.ts"],
+      "test": "A second 401 after the refresh surfaces to the caller instead of looping."
+    }
+  ]
+}

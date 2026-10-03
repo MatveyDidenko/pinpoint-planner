@@ -1,0 +1,58 @@
+import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  parseAnswerInput,
+  parseBlockInput,
+  parseBrowserMessage,
+  parsePlanInput,
+  parseStepsInput,
+  type Result,
+} from '../../src/core/schema';
+
+const fixturesDir = join(import.meta.dir, '..', 'fixtures');
+
+function load(relative: string): unknown {
+  return JSON.parse(readFileSync(join(fixturesDir, relative), 'utf8'));
+}
+
+function issuePaths(result: Result<unknown>): string[] {
+  return result.ok ? [] : result.issues.map((issue) => issue.path);
+}
+
+describe('schema', () => {
+  it('a valid plan fixture parses and keeps option order', () => {
+    const result = parsePlanInput(load('plan.auth-refresh.json'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.options.map((option) => option.id)).toEqual(['opt-a', 'opt-b', 'opt-c']);
+  });
+
+  it.each([
+    ['steps.opt-a.json', parseStepsInput],
+    ['steps.opt-c.json', parseStepsInput],
+    ['answer.opt-b.json', parseAnswerInput],
+    ['block.opt-b.patched.json', parseBlockInput],
+  ] as const)('the valid fixture %s parses', (file, parse) => {
+    expect(parse(load(file)).ok).toBe(true);
+  });
+
+  it.each([
+    ['plan.two-options.json', parsePlanInput, 'options'],
+    ['plan.two-recommended.json', parsePlanInput, 'options'],
+    ['plan.recommended-without-why.json', parsePlanInput, 'options.0.why'],
+    ['plan.duplicate-option-id.json', parsePlanInput, 'options.1.id'],
+    ['plan.option-id-findings.json', parsePlanInput, 'options.1.id'],
+    ['plan.edge-unknown-node.json', parsePlanInput, 'options.1.diagram.edges.0.to'],
+    ['plan.self-loop-edge.json', parsePlanInput, 'options.0.diagram.edges.0.to'],
+    ['plan.nine-nodes.json', parsePlanInput, 'options.0.diagram.nodes'],
+    ['plan.long-summary.json', parsePlanInput, 'findings.summary'],
+    ['plan.bad-id.json', parsePlanInput, 'id'],
+    ['message.ask-empty-text.json', parseBrowserMessage, 'text'],
+    ['message.choose-with-text.json', parseBrowserMessage, 'text'],
+  ] as const)('each invalid fixture reports the expected issue path: %s', (file, parse, path) => {
+    const result = parse(load(`invalid/${file}`));
+    expect(result.ok).toBe(false);
+    expect(issuePaths(result)).toContain(path);
+  });
+});

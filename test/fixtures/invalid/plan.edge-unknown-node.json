@@ -1,0 +1,257 @@
+{
+  "id": "auth-refresh",
+  "title": "Refresh expired auth tokens",
+  "task": "Refresh expired auth tokens without logging the user out",
+  "findings": {
+    "summary": "Every request already goes through one fetch wrapper, and the session store owns the token pair.",
+    "items": [
+      {
+        "path": "src/api/client.ts",
+        "role": "reuse",
+        "note": "The single fetch wrapper every request passes through, so it sees each 401 first."
+      },
+      {
+        "path": "src/auth/session.ts",
+        "role": "touch",
+        "note": "Holds the access and refresh tokens and needs a way to swap in a renewed pair."
+      },
+      {
+        "path": "src/auth/storage.ts",
+        "role": "context",
+        "note": "Persists the token pair to disk, so a renewed token must be written back here."
+      },
+      {
+        "path": "src/api/retry.ts",
+        "role": "reuse",
+        "note": "Already retries idempotent requests with backoff and can be reused for the replayed call."
+      }
+    ],
+    "diagram": {
+      "nodes": [
+        {
+          "id": "caller",
+          "label": "Call site",
+          "status": "external"
+        },
+        {
+          "id": "client",
+          "label": "Fetch wrapper",
+          "status": "reused"
+        },
+        {
+          "id": "retry",
+          "label": "Retry helper",
+          "status": "reused"
+        },
+        {
+          "id": "session",
+          "label": "Session store",
+          "status": "changed"
+        },
+        {
+          "id": "storage",
+          "label": "Token storage",
+          "status": "reused"
+        }
+      ],
+      "edges": [
+        {
+          "from": "caller",
+          "to": "client"
+        },
+        {
+          "from": "client",
+          "to": "retry"
+        },
+        {
+          "from": "client",
+          "to": "session",
+          "label": "reads token"
+        },
+        {
+          "from": "session",
+          "to": "storage"
+        }
+      ]
+    }
+  },
+  "options": [
+    {
+      "id": "opt-a",
+      "name": "Refresh inside the fetch wrapper",
+      "pattern": "Interceptor · retry once",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "Call site",
+            "status": "external"
+          },
+          {
+            "id": "wrapper",
+            "label": "Fetch wrapper",
+            "status": "changed"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "session",
+            "label": "Session store",
+            "status": "reused"
+          },
+          {
+            "id": "api",
+            "label": "API",
+            "status": "external"
+          }
+        ],
+        "edges": [
+          {
+            "from": "caller",
+            "to": "wrapper"
+          },
+          {
+            "from": "wrapper",
+            "to": "api"
+          },
+          {
+            "from": "wrapper",
+            "to": "refresh",
+            "label": "on 401"
+          },
+          {
+            "from": "refresh",
+            "to": "session"
+          }
+        ]
+      },
+      "reuses": ["src/api/client.ts", "src/api/retry.ts"],
+      "cost": {
+        "effort": "S",
+        "risk": "low",
+        "note": "One file changes and every caller gets the fix without edits."
+      },
+      "recommended": true,
+      "why": "It reuses the one place every request already passes through"
+    },
+    {
+      "id": "opt-b",
+      "name": "Proactive refresh timer",
+      "pattern": "Background renewal",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "timer",
+            "label": "Refresh timer",
+            "status": "new"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "storage",
+            "label": "Token storage",
+            "status": "reused"
+          },
+          {
+            "id": "session",
+            "label": "Session store",
+            "status": "changed"
+          },
+          {
+            "id": "wrapper",
+            "label": "Fetch wrapper",
+            "status": "reused"
+          }
+        ],
+        "edges": [
+          {
+            "from": "timer",
+            "to": "ghost",
+            "label": "before expiry"
+          },
+          {
+            "from": "refresh",
+            "to": "storage"
+          },
+          {
+            "from": "storage",
+            "to": "session"
+          },
+          {
+            "from": "session",
+            "to": "timer",
+            "label": "reschedule"
+          },
+          {
+            "from": "wrapper",
+            "to": "session"
+          }
+        ]
+      },
+      "reuses": ["src/auth/storage.ts"],
+      "cost": {
+        "effort": "M",
+        "risk": "medium",
+        "note": "A long-lived timer needs care around sleeping laptops and multiple tabs."
+      },
+      "recommended": false
+    },
+    {
+      "id": "opt-c",
+      "name": "Refresh at each call site",
+      "pattern": "Per-call retry",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "Each call site",
+            "status": "changed"
+          },
+          {
+            "id": "retry",
+            "label": "Retry helper",
+            "status": "reused"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "api",
+            "label": "API",
+            "status": "external"
+          }
+        ],
+        "edges": [
+          {
+            "from": "caller",
+            "to": "retry"
+          },
+          {
+            "from": "retry",
+            "to": "refresh",
+            "label": "on 401"
+          },
+          {
+            "from": "retry",
+            "to": "api"
+          }
+        ]
+      },
+      "reuses": ["src/api/retry.ts"],
+      "cost": {
+        "effort": "L",
+        "risk": "medium",
+        "note": "Dozens of call sites change and a new one can silently forget the retry."
+      },
+      "recommended": false
+    }
+  ]
+}

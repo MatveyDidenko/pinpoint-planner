@@ -1,0 +1,15 @@
+{
+  "optionId": "opt-c",
+  "steps": [
+    {
+      "title": "Add a withRefresh helper that wraps the retry helper",
+      "touches": ["src/api/retry.ts"],
+      "test": "withRefresh calls the refresh function once when the wrapped call returns 401."
+    },
+    {
+      "title": "Wrap every call site in withRefresh",
+      "touches": ["src/api/users.ts", "src/api/projects.ts", "src/api/billing.ts"],
+      "test": "Each API module has a test where an expired token is renewed and the call succeeds."
+    }
+  ]
+}

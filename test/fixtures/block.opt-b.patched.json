@@ -1,0 +1,29 @@
+{
+  "kind": "option",
+  "id": "opt-b",
+  "name": "Proactive refresh timer",
+  "pattern": "Background renewal",
+  "diagram": {
+    "nodes": [
+      { "id": "timer", "label": "Refresh timer", "status": "new" },
+      { "id": "lock", "label": "Tab lock", "status": "new" },
+      { "id": "refresh", "label": "Refresh call", "status": "new" },
+      { "id": "storage", "label": "Token storage", "status": "reused" },
+      { "id": "session", "label": "Session store", "status": "changed" }
+    ],
+    "edges": [
+      { "from": "timer", "to": "lock", "label": "one tab only" },
+      { "from": "lock", "to": "refresh" },
+      { "from": "refresh", "to": "storage" },
+      { "from": "storage", "to": "session" },
+      { "from": "session", "to": "timer", "label": "reschedule" }
+    ]
+  },
+  "reuses": ["src/auth/storage.ts"],
+  "cost": {
+    "effort": "M",
+    "risk": "medium",
+    "note": "A tab lock stops duplicate refreshes but adds one more moving part."
+  },
+  "recommended": false
+}
