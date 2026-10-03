@@ -1,4 +1,12 @@
-import { type BrowserMessage, MAX_EXCHANGES, type OptionInput, type PlanInput } from './schema';
+import {
+  type AnswerInput,
+  type BlockInput,
+  type BrowserMessage,
+  MAX_EXCHANGES,
+  type OptionInput,
+  type PlanInput,
+  type StepsInput,
+} from './schema';
 import {
   type Block,
   type Exchange,
@@ -8,6 +16,7 @@ import {
   type OptionBlock,
   type PlanState,
   StateError,
+  type StepsBlock,
   type Transition,
   type VerdictBlock,
 } from './types';
@@ -262,5 +271,145 @@ export function ackMessages(state: PlanState, ids: string[], now: string): Trans
   return {
     state: { ...state, revision: state.revision + 1, messages: stampAcked(state.messages, acking, now) },
     touched: [],
+  };
+}
+
+export function attachAnswer(state: PlanState, answer: AnswerInput, now: string): Transition {
+  const block = state.plan.blocks.find((b) => b.qa.some((exchange) => exchange.id === answer.questionId));
+  const exchange = block?.qa.find((e) => e.id === answer.questionId);
+  if (block === undefined || exchange === undefined)
+    throw new StateError('NOT_FOUND', `no question ${answer.questionId}`);
+  if (exchange.state === 'answered') throw new StateError('ALREADY_ANSWERED', `question ${exchange.id} is answered`);
+
+  const revision = state.revision + 1;
+  const answered: Exchange = {
+    ...exchange,
+    state: 'answered',
+    answer: { md: answer.md, ...(answer.diagram === undefined ? {} : { diagram: answer.diagram }), at: now },
+  };
+
+  return {
+    state: {
+      ...state,
+      revision,
+      plan: {
+        ...state.plan,
+        blocks: replaceBlock(state.plan.blocks, block.id, revision, (b) => ({
+          ...b,
+          qa: b.qa.map((e) => (e.id === exchange.id ? answered : e)),
+        })),
+      },
+      messages: stampAcked(state.messages, new Set([answer.questionId]), now),
+    },
+    touched: [block.id],
+  };
+}
+
+export function appendSteps(state: PlanState, input: StepsInput, now: string): Transition {
+  const option = findBlock(state, input.optionId);
+  if (option === undefined) throw new StateError('NOT_FOUND', `no block ${input.optionId}`);
+  if (option.kind !== 'option') throw new StateError('NOT_AN_OPTION', `block ${option.id} is not an option`);
+  if (option.steps.state === 'ready') throw new StateError('STEPS_EXIST', `option ${option.id} already has steps`);
+
+  const revision = state.revision + 1;
+  const stepsId = `steps-${option.id}`;
+  const previousLastId = state.plan.blocks[state.plan.blocks.length - 1]?.id ?? null;
+  const base: StepsBlock = {
+    id: stepsId,
+    kind: 'steps',
+    label: '',
+    optionId: option.id,
+    letter: option.letter,
+    optionName: option.name,
+    steps: input.steps,
+    rev: 1,
+    touchedAt: revision,
+    qa: [],
+  };
+  const stepsBlock: StepsBlock = { ...base, label: blockLabel(base) };
+  const chooseIds = state.messages
+    .filter((message) => message.kind === 'choose' && message.optionId === option.id)
+    .map((message) => message.id);
+
+  return {
+    state: {
+      ...state,
+      revision,
+      plan: {
+        ...state.plan,
+        blocks: [
+          ...replaceBlock(state.plan.blocks, option.id, revision, (b) =>
+            b.kind === 'option' ? { ...b, steps: { state: 'ready', blockId: stepsId } } : b,
+          ),
+          stepsBlock,
+        ],
+      },
+      messages: stampAcked(state.messages, new Set(chooseIds), now),
+    },
+    touched: [option.id, stepsId],
+    appended: { blockId: stepsId, after: previousLastId },
+  };
+}
+
+function applyPatch(block: Block, input: BlockInput, revision: number): Block {
+  if (input.kind === 'findings' && block.kind === 'findings') {
+    return { ...deriveFindings(input, revision), id: block.id, qa: block.qa };
+  }
+  if (input.kind === 'option' && block.kind === 'option') {
+    if (input.recommended !== block.recommended)
+      throw new StateError('RECOMMENDED_LOCKED', `option ${block.id} cannot change its recommended flag`);
+    return { ...deriveOption(input, block.letter, revision), id: block.id, qa: block.qa, steps: block.steps };
+  }
+  if (input.kind === 'verdict' && block.kind === 'verdict') return { ...block, why: input.why };
+  throw new StateError('KIND_MISMATCH', `block ${block.id} is a ${block.kind}, not a ${input.kind}`);
+}
+
+export function patchBlock(state: PlanState, blockId: string, input: BlockInput, _now: string): Transition {
+  const block = findBlock(state, blockId);
+  if (block === undefined) throw new StateError('NOT_FOUND', `no block ${blockId}`);
+
+  const revision = state.revision + 1;
+  const patched = applyPatch(block, input, revision);
+  const blocks = replaceBlock(state.plan.blocks, blockId, revision, () => patched);
+  const verdictStale =
+    block.kind === 'option' &&
+    patched.kind === 'option' &&
+    patched.recommended &&
+    (patched.name !== block.name || patched.why !== block.why);
+  const finalBlocks = verdictStale
+    ? replaceBlock(blocks, 'verdict', revision, (verdict) => ({ ...deriveVerdict(patched, revision), qa: verdict.qa }))
+    : blocks;
+
+  return {
+    state: { ...state, revision, plan: { ...state.plan, blocks: finalBlocks } },
+    touched: verdictStale ? [blockId, 'verdict'] : [blockId],
+  };
+}
+
+export function replacePlan(state: PlanState, input: PlanInput, now: string): Transition & { dropped: string[] } {
+  const revision = state.revision + 1;
+  const blocks = deriveBlocks(input, revision).map((block) => {
+    const previous = findBlock(state, block.id);
+    return previous === undefined ? block : { ...block, qa: previous.qa, rev: previous.rev + 1 };
+  });
+  const surviving = new Set(blocks.map((block) => block.id));
+  const dropped = state.messages
+    .filter(
+      (message) =>
+        message.ackedAt === undefined &&
+        ((message.blockId !== undefined && !surviving.has(message.blockId)) ||
+          (message.optionId !== undefined && !surviving.has(message.optionId))),
+    )
+    .map((message) => message.id);
+
+  return {
+    state: {
+      ...state,
+      revision,
+      plan: { ...state.plan, title: input.title, task: input.task, blocks },
+      messages: stampAcked(state.messages, new Set(dropped), now),
+    },
+    touched: blocks.map((block) => block.id),
+    dropped,
   };
 }

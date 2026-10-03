@@ -1,17 +1,41 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type BrowserMessage, MAX_EXCHANGES, type PlanInput, parsePlanInput } from '../../src/core/schema';
+import {
+  type AnswerInput,
+  type BlockInput,
+  type BrowserMessage,
+  type Finding,
+  MAX_EXCHANGES,
+  type OptionInput,
+  type PlanInput,
+  parseAnswerInput,
+  parseBlockInput,
+  parsePlanInput,
+  parseStepsInput,
+  type StepsInput,
+} from '../../src/core/schema';
 import {
   ackMessages,
+  appendSteps,
+  attachAnswer,
   blockLabel,
   findBlock,
   markDelivered,
   openPlan,
+  patchBlock,
   pendingMessages,
   postMessage,
+  replacePlan,
 } from '../../src/core/state';
-import { type OptionBlock, type PlanState, StateError, type VerdictBlock } from '../../src/core/types';
+import {
+  type FindingsBlock,
+  type OptionBlock,
+  type PlanState,
+  StateError,
+  type StepsBlock,
+  type VerdictBlock,
+} from '../../src/core/types';
 
 const NOW = '2026-10-03T10:00:00.000Z';
 
@@ -394,5 +418,339 @@ describe('ackMessages', () => {
     ]);
     expect(again.state.revision).toBe(first.revision + 1);
     expect(pendingMessages(again.state).map((m) => m.id)).toEqual(['m-3']);
+  });
+});
+
+describe('attachAnswer', () => {
+  function loadAnswer(): AnswerInput {
+    const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'answer.opt-b.json'), 'utf8'));
+    const parsed = parseAnswerInput(raw);
+    if (!parsed.ok) throw new Error('fixture answer is invalid');
+    return parsed.value;
+  }
+
+  function askedOnOptB(): PlanState {
+    let state = openPlan(loadPlan(), NOW);
+    state = postMessage(state, ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+    return postMessage(state, ask('opt-a', 'Why a wrapper?', 'client-02'), NOW).state;
+  }
+
+  it('attachAnswer answers the exchange, acks its message and touches only that block', () => {
+    const prev = askedOnOptB();
+    const later = '2026-10-03T10:05:00.000Z';
+    const answer = loadAnswer();
+    const result = attachAnswer(prev, answer, later);
+    const exchange = (findBlock(result.state, 'opt-b') as OptionBlock).qa[0];
+
+    expect(result.touched).toEqual(['opt-b']);
+    expect(exchange?.state).toBe('answered');
+    expect(exchange?.answer).toEqual({ md: answer.md, diagram: answer.diagram, at: later });
+    expect(result.state.messages.map((m) => m.ackedAt)).toEqual([later, undefined]);
+    expect(result.state.revision).toBe(prev.revision + 1);
+    expect(findBlock(result.state, 'opt-b')?.rev).toBe((findBlock(prev, 'opt-b')?.rev as number) + 1);
+    expect(findBlock(result.state, 'opt-b')?.touchedAt).toBe(result.state.revision);
+    expect(findBlock(result.state, 'opt-a')).toBe(findBlock(prev, 'opt-a') as OptionBlock);
+    expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict') as VerdictBlock);
+    expect(findBlock(prev, 'opt-b')?.qa[0]?.state).toBe('asked');
+  });
+
+  it('attachAnswer without a diagram leaves the diagram key off the answer', () => {
+    const result = attachAnswer(askedOnOptB(), { questionId: 'm-1', md: 'Plain text.' }, NOW);
+    const answered = (findBlock(result.state, 'opt-b') as OptionBlock).qa[0]?.answer;
+
+    expect(answered).toEqual({ md: 'Plain text.', at: NOW });
+    expect(answered && 'diagram' in answered).toBe(false);
+  });
+
+  it('attachAnswer twice throws ALREADY_ANSWERED', () => {
+    const answered = attachAnswer(askedOnOptB(), loadAnswer(), NOW).state;
+
+    expect(thrownCode(() => attachAnswer(answered, loadAnswer(), NOW))).toBe('ALREADY_ANSWERED');
+  });
+
+  it('attachAnswer for an unknown question throws NOT_FOUND', () => {
+    expect(thrownCode(() => attachAnswer(askedOnOptB(), { questionId: 'm-99', md: 'x' }, NOW))).toBe('NOT_FOUND');
+  });
+});
+
+describe('appendSteps', () => {
+  function loadSteps(name: string): StepsInput {
+    const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', name), 'utf8'));
+    const parsed = parseStepsInput(raw);
+    if (!parsed.ok) throw new Error(`fixture ${name} is invalid`);
+    return parsed.value;
+  }
+
+  function chosenA(): PlanState {
+    return postMessage(openPlan(loadPlan(), NOW), choose('opt-a', 'client-01'), NOW).state;
+  }
+
+  it('appendSteps adds steps-<opt> last, marks the option ready and acks its chooses', () => {
+    const prev = chosenA();
+    const later = '2026-10-03T10:05:00.000Z';
+    const input = loadSteps('steps.opt-a.json');
+    const result = appendSteps(prev, input, later);
+    const blocks = result.state.plan.blocks;
+    const steps = blocks[blocks.length - 1] as StepsBlock;
+    const option = findBlock(result.state, 'opt-a') as OptionBlock;
+
+    expect(blocks.map((b) => b.id)).toEqual(['findings', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'steps-opt-a']);
+    expect(steps).toEqual({
+      id: 'steps-opt-a',
+      kind: 'steps',
+      label: 'Steps · Way A · Refresh inside the fetch wrapper',
+      optionId: 'opt-a',
+      letter: 'A',
+      optionName: 'Refresh inside the fetch wrapper',
+      steps: input.steps,
+      rev: 1,
+      touchedAt: result.state.revision,
+      qa: [],
+    });
+    expect(option.steps).toEqual({ state: 'ready', blockId: 'steps-opt-a' });
+    expect(option.rev).toBe((findBlock(prev, 'opt-a')?.rev as number) + 1);
+    expect(option.touchedAt).toBe(result.state.revision);
+    expect(result.touched).toEqual(['opt-a', 'steps-opt-a']);
+    expect(result.appended).toEqual({ blockId: 'steps-opt-a', after: 'verdict' });
+    expect(result.state.revision).toBe(prev.revision + 1);
+    expect(result.state.messages.map((m) => m.ackedAt)).toEqual([later]);
+    expect(pendingMessages(result.state)).toEqual([]);
+    expect(findBlock(result.state, 'opt-b')).toBe(findBlock(prev, 'opt-b') as OptionBlock);
+    expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict') as VerdictBlock);
+  });
+
+  it('appendSteps works for an option nobody chose', () => {
+    const result = appendSteps(openPlan(loadPlan(), NOW), loadSteps('steps.opt-c.json'), NOW);
+
+    expect((findBlock(result.state, 'opt-c') as OptionBlock).steps).toEqual({ state: 'ready', blockId: 'steps-opt-c' });
+    expect(result.touched).toEqual(['opt-c', 'steps-opt-c']);
+  });
+
+  it('appendSteps twice for one option throws STEPS_EXIST', () => {
+    const once = appendSteps(chosenA(), loadSteps('steps.opt-a.json'), NOW).state;
+
+    expect(thrownCode(() => appendSteps(once, loadSteps('steps.opt-a.json'), NOW))).toBe('STEPS_EXIST');
+  });
+
+  it('appendSteps leaves a pending choose for another option pending', () => {
+    const both = postMessage(chosenA(), choose('opt-c', 'client-02'), NOW).state;
+    const result = appendSteps(both, loadSteps('steps.opt-a.json'), NOW);
+
+    expect(pendingMessages(result.state).map((m) => [m.id, m.optionId])).toEqual([['m-2', 'opt-c']]);
+    expect((findBlock(result.state, 'opt-c') as OptionBlock).steps).toEqual({ state: 'requested' });
+  });
+
+  it('appendSteps for an unknown or non-option block throws NOT_FOUND or NOT_AN_OPTION', () => {
+    const state = openPlan(loadPlan(), NOW);
+    const steps = loadSteps('steps.opt-a.json').steps;
+
+    expect(thrownCode(() => appendSteps(state, { optionId: 'opt-z', steps }, NOW))).toBe('NOT_FOUND');
+    expect(thrownCode(() => appendSteps(state, { optionId: 'verdict', steps }, NOW))).toBe('NOT_AN_OPTION');
+  });
+});
+
+describe('patchBlock', () => {
+  type OptionPatch = Extract<BlockInput, { kind: 'option' }>;
+
+  function loadPatch(): OptionPatch {
+    const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'block.opt-b.patched.json'), 'utf8'));
+    const parsed = parseBlockInput(raw);
+    if (!parsed.ok || parsed.value.kind !== 'option') throw new Error('fixture block patch is invalid');
+    return parsed.value;
+  }
+
+  function recommendedPatch(change: { name?: string; why?: string }): OptionPatch {
+    const { options } = loadPlan();
+    return { ...(options[0] as OptionInput), ...change, kind: 'option' };
+  }
+
+  function askedOnOptB(): PlanState {
+    return postMessage(openPlan(loadPlan(), NOW), ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+  }
+
+  it('patchBlock replaces content, keeps qa and bumps rev', () => {
+    const prev = askedOnOptB();
+    const input = loadPatch();
+    const result = patchBlock(prev, 'opt-b', input, NOW);
+    const before = findBlock(prev, 'opt-b') as OptionBlock;
+    const after = findBlock(result.state, 'opt-b') as OptionBlock;
+
+    expect(after.diagram).toEqual(input.diagram);
+    expect(after.diagram).not.toEqual(before.diagram);
+    expect(after.qa).toEqual(before.qa);
+    expect(after.qa).toHaveLength(1);
+    expect(after.letter).toBe('B');
+    expect(after.steps).toEqual(before.steps);
+    expect(after.label).toBe('Way B · Proactive refresh timer');
+    expect(after.rev).toBe(before.rev + 1);
+    expect(after.touchedAt).toBe(result.state.revision);
+    expect(result.touched).toEqual(['opt-b']);
+    expect(result.state.revision).toBe(prev.revision + 1);
+    expect(findBlock(result.state, 'opt-a')).toBe(findBlock(prev, 'opt-a') as OptionBlock);
+    expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict') as VerdictBlock);
+    expect(findBlock(prev, 'opt-b')).toBe(before);
+  });
+
+  it("patching the recommended option's why re-derives the verdict", () => {
+    const prev = postMessage(openPlan(loadPlan(), NOW), ask('verdict', 'Why this one?', 'client-01'), NOW).state;
+    const result = patchBlock(
+      prev,
+      'opt-a',
+      recommendedPatch({ name: 'Refresh in the wrapper', why: 'One choke point.' }),
+      NOW,
+    );
+    const verdict = findBlock(result.state, 'verdict') as VerdictBlock;
+    const before = findBlock(prev, 'verdict') as VerdictBlock;
+
+    expect(result.touched).toEqual(['opt-a', 'verdict']);
+    expect(verdict.why).toBe('One choke point.');
+    expect(verdict.optionName).toBe('Refresh in the wrapper');
+    expect(verdict.label).toBe('The pick');
+    expect(verdict.optionId).toBe('opt-a');
+    expect(verdict.letter).toBe('A');
+    expect(verdict.qa).toEqual(before.qa);
+    expect(verdict.rev).toBe(before.rev + 1);
+    expect(verdict.touchedAt).toBe(result.state.revision);
+    expect((findBlock(result.state, 'opt-a') as OptionBlock).label).toBe('Way A · Refresh in the wrapper');
+    expect(result.state.revision).toBe(prev.revision + 1);
+  });
+
+  it('patching the recommended option without changing name or why leaves the verdict untouched', () => {
+    const prev = openPlan(loadPlan(), NOW);
+    const result = patchBlock(prev, 'opt-a', { ...recommendedPatch({}), reuses: ['src/api/retry.ts'] }, NOW);
+
+    expect(result.touched).toEqual(['opt-a']);
+    expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict') as VerdictBlock);
+  });
+
+  it('patchBlock on findings and verdict replaces their content', () => {
+    const prev = openPlan(loadPlan(), NOW);
+    const oneItem = loadPlan().findings.items[0] as Finding;
+    const findings = patchBlock(prev, 'findings', { kind: 'findings', summary: 'New summary.', items: [oneItem] }, NOW);
+    const verdict = patchBlock(prev, 'verdict', { kind: 'verdict', why: 'A better reason.' }, NOW);
+    const patchedFindings = findBlock(findings.state, 'findings') as FindingsBlock;
+
+    expect(patchedFindings.summary).toBe('New summary.');
+    expect(patchedFindings.items).toEqual([oneItem]);
+    expect('diagram' in patchedFindings).toBe(false);
+    expect(patchedFindings.rev).toBe(2);
+    expect(findings.touched).toEqual(['findings']);
+    expect((findBlock(verdict.state, 'verdict') as VerdictBlock).why).toBe('A better reason.');
+    expect((findBlock(verdict.state, 'verdict') as VerdictBlock).rev).toBe(2);
+    expect(verdict.touched).toEqual(['verdict']);
+  });
+
+  it('patchBlock keeps the block id when the input names another option', () => {
+    const input = loadPatch();
+    const result = patchBlock(openPlan(loadPlan(), NOW), 'opt-c', { ...input, id: 'opt-b' }, NOW);
+
+    expect((findBlock(result.state, 'opt-c') as OptionBlock).letter).toBe('C');
+    expect(result.state.plan.blocks.map((b) => b.id)).toEqual(['findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+  });
+
+  it('patchBlock that flips recommended throws RECOMMENDED_LOCKED', () => {
+    const state = openPlan(loadPlan(), NOW);
+    const { options } = loadPlan();
+    const demote: OptionPatch = { ...(options[0] as OptionInput), kind: 'option', recommended: false, why: undefined };
+    const promote: OptionPatch = { ...loadPatch(), recommended: true, why: 'Because.' };
+
+    expect(thrownCode(() => patchBlock(state, 'opt-a', demote, NOW))).toBe('RECOMMENDED_LOCKED');
+    expect(thrownCode(() => patchBlock(state, 'opt-b', promote, NOW))).toBe('RECOMMENDED_LOCKED');
+  });
+
+  it('patchBlock with a different kind throws KIND_MISMATCH', () => {
+    const withSteps = appendSteps(
+      openPlan(loadPlan(), NOW),
+      { optionId: 'opt-a', steps: [{ title: 'Do it', touches: [], test: 'It is done.' }] },
+      NOW,
+    ).state;
+    const findings: BlockInput = { kind: 'findings', summary: 'x', items: [loadPlan().findings.items[0] as Finding] };
+
+    expect(thrownCode(() => patchBlock(withSteps, 'opt-a', findings, NOW))).toBe('KIND_MISMATCH');
+    expect(thrownCode(() => patchBlock(withSteps, 'verdict', loadPatch(), NOW))).toBe('KIND_MISMATCH');
+    expect(thrownCode(() => patchBlock(withSteps, 'steps-opt-a', loadPatch(), NOW))).toBe('KIND_MISMATCH');
+  });
+
+  it('patchBlock for an unknown block throws NOT_FOUND', () => {
+    expect(thrownCode(() => patchBlock(openPlan(loadPlan(), NOW), 'opt-z', loadPatch(), NOW))).toBe('NOT_FOUND');
+  });
+});
+
+describe('replacePlan', () => {
+  const LATER = '2026-10-03T11:00:00.000Z';
+  const stepsOptA: StepsInput = { optionId: 'opt-a', steps: [{ title: 'Do it', touches: [], test: 'It is done.' }] };
+
+  function withExchanges(): PlanState {
+    let state = openPlan(loadPlan(), NOW);
+    state = postMessage(state, ask('findings', 'what is this?', 'client-01'), NOW).state;
+    state = postMessage(state, ask('opt-b', 'why a timer?', 'client-02'), NOW).state;
+    state = postMessage(state, ask('verdict', 'sure?', 'client-03'), NOW).state;
+    return appendSteps(state, stepsOptA, NOW).state;
+  }
+
+  function renamedOptC(): PlanInput {
+    const input = loadPlan();
+    const [a, b, c] = input.options;
+    return { ...input, options: [a, b, { ...c, id: 'opt-d' }] } as PlanInput;
+  }
+
+  it('replacePlan keeps exchanges for matching block ids and drops steps blocks', () => {
+    const prev = withExchanges();
+    const input = { ...loadPlan(), title: 'Auth refresh, second pass', task: 'A new task.' };
+    const result = replacePlan(prev, input, LATER);
+    const next = result.state;
+
+    expect(next.plan.blocks.map((b) => b.id)).toEqual(['findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(next.plan.title).toBe('Auth refresh, second pass');
+    expect(next.plan.task).toBe('A new task.');
+    expect(next.plan.openedAt).toBe(prev.plan.openedAt);
+    expect(findBlock(next, 'findings')?.qa.map((e) => e.question)).toEqual(['what is this?']);
+    expect(findBlock(next, 'opt-b')?.qa.map((e) => e.question)).toEqual(['why a timer?']);
+    expect(findBlock(next, 'verdict')?.qa.map((e) => e.question)).toEqual(['sure?']);
+    expect(findBlock(next, 'opt-a')?.qa).toEqual([]);
+    expect(next.plan.blocks.filter((b) => b.kind === 'option').map((b) => (b as OptionBlock).steps)).toEqual([
+      { state: 'none' },
+      { state: 'none' },
+      { state: 'none' },
+    ]);
+    expect(next.revision).toBe(prev.revision + 1);
+    expect(next.nextMessageSeq).toBe(prev.nextMessageSeq);
+    expect(next.review).toBe(prev.review);
+    expect(result.touched).toEqual(['findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    for (const block of next.plan.blocks) {
+      expect(block.rev).toBe((findBlock(prev, block.id)?.rev as number) + 1);
+      expect(block.touchedAt).toBe(next.revision);
+    }
+    expect(result.dropped).toEqual([]);
+  });
+
+  it('replacePlan gives a brand-new block id rev 1 and an empty qa', () => {
+    const result = replacePlan(withExchanges(), renamedOptC(), LATER);
+    const added = findBlock(result.state, 'opt-d') as OptionBlock;
+
+    expect(added.rev).toBe(1);
+    expect(added.qa).toEqual([]);
+    expect(added.touchedAt).toBe(result.state.revision);
+    expect(result.touched).toEqual(['findings', 'opt-a', 'opt-b', 'opt-d', 'verdict']);
+  });
+
+  it('replacePlan acks and reports pending messages on blocks that disappeared', () => {
+    let state = withExchanges();
+    state = postMessage(state, ask('steps-opt-a', 'why this step?', 'client-04'), NOW).state;
+    state = postMessage(state, ask('opt-c', 'and call sites?', 'client-05'), NOW).state;
+    state = postMessage(state, choose('opt-b', 'client-06'), NOW).state;
+    state = postMessage(state, ask('opt-b', 'still pending?', 'client-07'), NOW).state;
+    state = postMessage(state, ask('opt-c', 'answered one', 'client-08'), NOW).state;
+    state = attachAnswer(state, { questionId: 'm-8', md: 'ok' }, NOW).state;
+    const answeredAckedAt = state.messages.find((m) => m.id === 'm-8')?.ackedAt;
+
+    const result = replacePlan(state, renamedOptC(), LATER);
+
+    expect(result.dropped).toEqual(['m-4', 'm-5']);
+    expect(result.state.messages.find((m) => m.id === 'm-4')?.ackedAt).toBe(LATER);
+    expect(result.state.messages.find((m) => m.id === 'm-5')?.ackedAt).toBe(LATER);
+    expect(result.state.messages.find((m) => m.id === 'm-8')?.ackedAt).toBe(answeredAckedAt);
+    expect(pendingMessages(result.state).map((m) => m.id)).toEqual(['m-1', 'm-2', 'm-3', 'm-6', 'm-7']);
+    expect((findBlock(result.state, 'opt-b') as OptionBlock).steps).toEqual({ state: 'none' });
   });
 });
