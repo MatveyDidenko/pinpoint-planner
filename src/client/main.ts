@@ -1,6 +1,8 @@
 import type { Boot } from '../shared/frames';
+import { initComposer } from './composer';
 import { connectLive } from './live';
 import { appendBlock, swapBlock } from './patch';
+import { initSelect } from './select';
 import { initTheme, toggleTheme } from './theme';
 
 initTheme();
@@ -12,6 +14,8 @@ document.addEventListener('click', (event) => {
 const bootText = document.getElementById('pinpoint-boot')?.textContent;
 if (bootText) {
   const boot = JSON.parse(bootText) as Boot;
+  initSelect();
+  initComposer(boot.planId);
   connectLive(boot.planId, boot.revision, {
     block: ({ html, rev }) => swapBlock(html, rev),
     appended: ({ html, after }) => appendBlock(html, after),
