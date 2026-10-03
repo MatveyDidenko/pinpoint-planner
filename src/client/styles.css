@@ -529,9 +529,10 @@ figure {
   box-shadow: var(--shadow);
 }
 
-figure svg {
+figure svg,
+.answer-diagram svg {
   display: block;
-  max-width: 100%;
+  max-width: none;
   height: auto;
   color: var(--ink);
 }
@@ -884,6 +885,7 @@ figure svg {
 .answer-diagram {
   margin-top: 12px;
   padding: 10px;
+  overflow-x: auto;
 }
 
 #composer {
@@ -1103,15 +1105,5 @@ figure svg {
 
   .steps-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  figure.diagram,
-  .answer-diagram {
-    overflow-x: auto;
-  }
-
-  .diagram svg,
-  .answer-diagram svg {
-    max-width: none;
   }
 }
