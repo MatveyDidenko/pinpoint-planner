@@ -60,6 +60,7 @@ export interface AppDeps {
   browserGraceMs?: number;
   render?: (block: Block) => string;
   onShutdown?: () => void;
+  onActivity?: () => void;
 }
 
 export interface PinpointApp {
@@ -187,9 +188,16 @@ export function createApp(deps: AppDeps): PinpointApp {
     onChange: (planId) => {
       reconcileGrace(planId);
       sse.broadcast(planId, presenceFrame(planId));
+      deps.onActivity?.();
     },
   });
-  const sse = new SseHub({ heartbeatMs, onChange: reconcileGrace });
+  const sse = new SseHub({
+    heartbeatMs,
+    onChange: (planId) => {
+      reconcileGrace(planId);
+      deps.onActivity?.();
+    },
+  });
   const app = new Hono();
 
   const presence = (planId: string): Presence => {
@@ -345,6 +353,11 @@ export function createApp(deps: AppDeps): PinpointApp {
       busy: polls.total() + sse.total() > 0,
     }),
   );
+
+  app.post('/api/shutdown', (c) => {
+    setTimeout(() => deps.onShutdown?.(), 0);
+    return c.json({ ok: true });
+  });
 
   app.get('/', (c) => c.html(renderHome(store.summaries(presence, baseUrl), assets)));
 
