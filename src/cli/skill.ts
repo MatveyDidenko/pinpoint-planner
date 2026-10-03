@@ -1,0 +1,91 @@
+import { join } from 'node:path';
+import type { Issue } from '../core/schema';
+import { COMMAND_NAMES } from './commands';
+
+export const SKILL_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
+export const SKILL_MAX_CHARS = 4000;
+
+const FRONTMATTER_KEYS = ['name', 'description', 'allowed-tools'];
+const ALLOWED_TOOLS = /^Bash\((.*):\*\)$/;
+
+export function createSkillMarkdown({ invocation }: { invocation: string }): string {
+  const inv = invocation;
+  return `---
+name: pinpoint
+description: Use when the user asks for a plan, design or approach and more than one way exists; it opens three drawn options in the browser instead of writing a text plan.
+allowed-tools: Bash(${inv}:*)
+---
+
+# Pinpoint
+
+Pinpoint shows your plan in the user's browser and sends their questions and choices back to you through a poll.
+
+1. **When.** The user asks for a plan, design or approach and more than one way exists. Do not write a text plan; use Pinpoint.
+2. **Look first.** Read the codebase before proposing anything. Collect \`reuse\`, \`touch\` and \`context\` files, each with a one-line note. Never propose building what a \`reuse\` item already does.
+3. **Draw three ways.** Run \`${inv} example plan\` and copy the shape. Write exactly three options. Each has a diagram of at most 8 nodes with statuses, the pattern name, what it reuses and a cost. Mark exactly one option \`recommended: true\` with a one-line \`why\`. The diagram carries the structure; a sentence explains it.
+4. **Open.** Write the plan JSON to your scratch directory, never into the user's repo, then run \`${inv} open <file>\`. On \`status: "error"\`, fix what \`issues\` lists and run it again.
+5. **Stay on the line.** Run the poll exactly as \`next_step\` prints it, as a background Bash command with \`run_in_background: true\` and \`timeout: 7200000\`. Never use nohup, &, or disown. Do not talk to the user while it runs.
+6. **When it exits,** read stdout completely and follow \`next_step\` literally.
+7. **Rules.**
+   - Change only the block a message names.
+   - Run \`${inv} show <id> --block <block-id>\` before \`${inv} patch-block\`.
+   - Run one poll at a time.
+   - Treat the stdout JSON as the contract.
+   - \`${inv} help\` and \`next_step\` are authoritative.
+`;
+}
+
+function frontmatterOf(md: string): string[] | undefined {
+  if (!md.startsWith('---\n')) return undefined;
+  const end = md.indexOf('\n---\n', 3);
+  if (end === -1) return undefined;
+  return md.slice(4, end).split('\n');
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function validateSkill(md: string): Issue[] {
+  const issues: Issue[] = [];
+  if (md.length > SKILL_MAX_CHARS) {
+    issues.push({ path: 'size', message: `the skill is ${md.length} chars; the cap is ${SKILL_MAX_CHARS}` });
+  }
+
+  const lines = frontmatterOf(md);
+  if (lines === undefined) {
+    issues.push({ path: 'frontmatter', message: 'the skill must start with a --- frontmatter block' });
+    return issues;
+  }
+  const entries = new Map<string, string>();
+  for (const line of lines) {
+    const match = /^([\w-]+):\s*(.*)$/.exec(line);
+    if (match) entries.set(match[1] as string, match[2] as string);
+  }
+  for (const key of FRONTMATTER_KEYS) {
+    if (!entries.has(key)) issues.push({ path: `frontmatter.${key}`, message: `missing frontmatter key ${key}` });
+  }
+  for (const key of entries.keys()) {
+    if (!FRONTMATTER_KEYS.includes(key)) {
+      issues.push({ path: `frontmatter.${key}`, message: `unknown frontmatter key ${key}` });
+    }
+  }
+
+  const invocation = ALLOWED_TOOLS.exec(entries.get('allowed-tools') ?? '')?.[1];
+  if (invocation === undefined) {
+    if (entries.has('allowed-tools')) {
+      issues.push({ path: 'frontmatter.allowed-tools', message: 'allowed-tools must be Bash(<invocation>:*)' });
+    }
+    return issues;
+  }
+
+  const body = md.slice(md.indexOf('\n---\n', 3) + 5);
+  const commandRef = new RegExp(`\`${escapeRegExp(invocation)} ([^\\s\`]+)`, 'g');
+  for (const match of body.matchAll(commandRef)) {
+    const word = match[1] as string;
+    if (!COMMAND_NAMES.includes(word)) {
+      issues.push({ path: 'body', message: `\`${invocation} ${word}\` is not a pinpoint command` });
+    }
+  }
+  return issues;
+}

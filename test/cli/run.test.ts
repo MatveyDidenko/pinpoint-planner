@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { EXAMPLES } from '../../src/cli/examples';
 import type { CliIo } from '../../src/cli/io';
 import { run } from '../../src/cli/run';
+import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
 import { POLL_KEYS } from '../../src/core/output';
 import { parseAnswerInput, parseBlockInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
 import { asFetch, fakeIo } from '../helpers/fake-io';
@@ -478,5 +479,65 @@ describe('run agent loop commands', () => {
       expect(typeof JSON.parse(text)).toBe('object');
       expect(exit).toBe(JSON.parse(text).status === 'error' ? 1 : 0);
     }
+  });
+});
+
+describe('skill --install', () => {
+  function installIo(env: Record<string, string>) {
+    const out: string[] = [];
+    const written: { path: string; content: string }[] = [];
+    const io = fakeIo({
+      env: { HOME: '/home/tester', ...env },
+      argv1: '/repo/bin/pinpoint.ts',
+      execPath: '/opt/bun',
+      stdout: (s) => {
+        out.push(s);
+      },
+      writeFile: (path, content) => {
+        written.push({ path, content });
+        return Promise.resolve();
+      },
+    });
+    return { io, out, written };
+  }
+
+  it('skill --install --out writes a file whose allowed-tools carries the absolute invocation', async () => {
+    const custom = installIo({});
+    expect(await run(['skill', '--install', '--out', '/tmp/x/SKILL.md'], custom.io)).toBe(0);
+    const prefix = '/opt/bun /repo/bin/pinpoint.ts';
+    expect(custom.written).toHaveLength(1);
+    expect(custom.written[0]?.path).toBe('/tmp/x/SKILL.md');
+    const md = custom.written[0]?.content as string;
+    expect(md).toBe(createSkillMarkdown({ invocation: prefix }));
+    expect(md.split('\n')).toContain(`allowed-tools: Bash(${prefix}:*)`);
+    expect(md).toContain(`\`${prefix} example plan\``);
+    expect(validateSkill(md)).toEqual([]);
+    expect(onlyDocument(custom.out)).toMatchObject({
+      status: 'skill-installed',
+      path: '/tmp/x/SKILL.md',
+      invocation: prefix,
+      chars: md.length,
+    });
+    expect(typeof onlyDocument(custom.out).next_step).toBe('string');
+
+    const home = installIo({});
+    expect(await run(['skill', '--install'], home.io)).toBe(0);
+    expect(home.written.map((w) => w.path)).toEqual(['/home/tester/.claude/skills/pinpoint/SKILL.md']);
+  });
+
+  it('skill --install honours PINPOINT_INVOCATION', async () => {
+    const { io, out, written } = installIo({ PINPOINT_INVOCATION: 'pp' });
+    expect(await run(['skill', '--install', '--out', '/tmp/x/SKILL.md'], io)).toBe(0);
+    const md = written[0]?.content as string;
+    expect(md.split('\n')).toContain('allowed-tools: Bash(pp:*)');
+    expect(md).toContain('`pp open <file>`');
+    expect(onlyDocument(out)).toMatchObject({ status: 'skill-installed', invocation: 'pp' });
+  });
+
+  it('skill --out without --install is a bad-args error and writes nothing', async () => {
+    const { io, out, written } = installIo({});
+    expect(await run(['skill', '--out', '/tmp/x/SKILL.md'], io)).toBe(1);
+    expect(onlyDocument(out)).toMatchObject({ status: 'error', code: 'BAD_ARGS' });
+    expect(written).toEqual([]);
   });
 });

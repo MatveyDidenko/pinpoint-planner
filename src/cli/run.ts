@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { Invocation } from '../core/output';
 import {
   detectInvocation,
@@ -21,6 +23,7 @@ import { ensureServer } from './ensure-server';
 import { CliError } from './errors';
 import { EXAMPLES, isExampleKind } from './examples';
 import { type CliIo, type Config, configFrom } from './io';
+import { createSkillMarkdown, SKILL_PATH, validateSkill } from './skill';
 
 interface Context {
   args: ParsedArgs;
@@ -247,6 +250,59 @@ const serve: Handler = async ({ args, io, config }) => {
   return undefined;
 };
 
+const SKILL_INVOCATION = 'pinpoint';
+
+const installSkill: Handler = async ({ args, io, inv }) => {
+  const md = createSkillMarkdown({ invocation: inv });
+  const issues = validateSkill(md);
+  if (issues.length > 0) {
+    return errorOutput({
+      code: 'INVALID_INPUT',
+      message: 'the generated skill does not validate',
+      issues,
+      nextStep: 'Fix the skill template in src/cli/skill.ts and run `skill --install` again.',
+    });
+  }
+  const out = args.flags.out;
+  const path =
+    typeof out === 'string' ? out : join(io.env.HOME ?? homedir(), '.claude', 'skills', 'pinpoint', 'SKILL.md');
+  await io.writeFile(path, md);
+  return {
+    status: 'skill-installed',
+    path,
+    invocation: inv,
+    chars: md.length,
+    next_step: 'The pinpoint skill is installed; use it the next time the user asks for a plan.',
+  };
+};
+
+const skill: Handler = async (ctx) => {
+  const { args, io, inv } = ctx;
+  if (args.flags.install === true) return installSkill(ctx);
+  if (args.flags.out !== undefined) {
+    throw new CliError('BAD_ARGS', '`skill --out` only applies together with --install.');
+  }
+  const md = createSkillMarkdown({ invocation: SKILL_INVOCATION });
+  if (args.flags.check !== true) {
+    await io.writeFile(SKILL_PATH, md);
+    return {
+      status: 'skill-written',
+      path: SKILL_PATH,
+      chars: md.length,
+      next_step: 'Commit skills/pinpoint/SKILL.md if it changed.',
+    };
+  }
+  const committed = await io.readFile(SKILL_PATH).catch(() => undefined);
+  if (committed === md) {
+    return { status: 'skill-ok', path: SKILL_PATH, next_step: 'The committed skill is up to date.' };
+  }
+  return errorOutput({
+    code: 'INVALID_INPUT',
+    message: 'skills/pinpoint/SKILL.md is out of date',
+    nextStep: `Run \`${inv} skill\` to regenerate it, then commit the file.`,
+  });
+};
+
 const HANDLERS: Record<string, Handler> = {
   serve,
   home,
@@ -261,6 +317,7 @@ const HANDLERS: Record<string, Handler> = {
   'patch-block': patchBlock,
   ack,
   stop,
+  skill,
 };
 
 export async function run(argv: string[], io: CliIo): Promise<number> {
@@ -277,7 +334,7 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
     const api = apiClient(io.fetch, config.baseUrl, inv);
     const doc = await handler({ args, io, config, inv, api });
     if (doc !== undefined) io.stdout(`${JSON.stringify(doc)}\n`);
-    return 0;
+    return (doc as { status?: unknown } | undefined)?.status === 'error' ? 1 : 0;
   } catch (error) {
     const failure =
       error instanceof CliError ? error : new CliError('IO', error instanceof Error ? error.message : String(error));
