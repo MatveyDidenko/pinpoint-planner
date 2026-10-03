@@ -1,3 +1,4 @@
+import type { Presence } from './presence';
 import type { Cost, Finding, Graph, Step } from './schema';
 
 export type Letter = 'A' | 'B' | 'C';
@@ -104,4 +105,13 @@ export class StateError extends Error {
     this.name = 'StateError';
     this.code = code;
   }
+}
+
+export interface PlanSummary {
+  id: string;
+  title: string;
+  url: string;
+  revision: number;
+  pending: number;
+  presence: Presence;
 }

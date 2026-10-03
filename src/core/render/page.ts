@@ -1,0 +1,80 @@
+import { type Presence, presenceLabel } from '../presence';
+import type { Block, PlanState, PlanSummary } from '../types';
+import { renderBlock } from './blocks';
+import { attr, esc, jsonScript } from './esc';
+
+export type Assets = { css: string; fontCss: string; js: string };
+
+const HEAD_META = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
+
+function documentShell(title: string, assets: Assets, body: string, scripts: string): string {
+  return (
+    `<!doctype html><html lang="en"><head>${HEAD_META}<title>${esc(title)}</title>` +
+    `<style>${assets.fontCss}\n${assets.css}</style></head><body>${body}${scripts}</body></html>`
+  );
+}
+
+function header(s: PlanState, presence: Presence, undelivered: number): string {
+  const handedBack = s.review === 'handed-back';
+  return (
+    `<header class="plan-header" data-testid="plan-header">` +
+    `<div class="plan-header__text"><div class="eyebrow">PINPOINT</div>` +
+    `<h1 class="plan-title">${esc(s.plan.title)}</h1><p class="plan-task">${esc(s.plan.task)}</p></div>` +
+    `<div class="plan-header__actions">` +
+    `<span class="presence" data-testid="presence" data-state="${attr(presence)}"><span class="dot"></span>` +
+    `<span class="presence-label">${esc(presenceLabel(presence, undelivered))}</span></span>` +
+    `<button type="button" class="done-btn" data-action="done" data-testid="done"${handedBack ? ' disabled' : ''}>Done reviewing</button>` +
+    `<button type="button" class="theme-toggle" data-testid="theme-toggle" aria-label="Toggle theme">Theme</button>` +
+    `</div></header>`
+  );
+}
+
+function stage(n: string, title: string, inner: string, hidden = false): string {
+  return (
+    `<section class="stage" data-stage="${n}" data-testid="stage-${n}"${hidden ? ' hidden' : ''}>` +
+    `<h2 class="stage-eyebrow eyebrow">${esc(`${n} · ${title}`)}</h2>${inner}</section>`
+  );
+}
+
+function renderAll(blocks: Block[]): string {
+  return blocks.map(renderBlock).join('');
+}
+
+export function renderPage(
+  s: PlanState,
+  assets: Assets,
+  opts: { presence: Presence; undelivered: number; baseUrl: string },
+): string {
+  const blocks = s.plan.blocks;
+  const ofKind = <K extends Block['kind']>(kind: K) => blocks.filter((b) => b.kind === kind);
+  const hasSteps = ofKind('steps').length > 0;
+
+  const stages =
+    stage('01', "What's already here", renderAll(ofKind('findings'))) +
+    stage('02', 'Three ways', `<div class="options">${renderAll(ofKind('option'))}</div>`) +
+    stage('03', 'The pick', renderAll(ofKind('verdict'))) +
+    stage('04', 'Steps', `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'))}</div>`, !hasSteps);
+
+  const body =
+    `${header(s, opts.presence, opts.undelivered)}<main class="page" data-testid="page">${stages}` +
+    `<div id="composer" data-testid="composer" hidden></div><div id="toast" data-testid="toast" hidden></div></main>`;
+
+  const boot = jsonScript({ planId: s.plan.id, revision: s.revision, presence: opts.presence, review: s.review });
+  const scripts = `<script type="application/json" id="pinpoint-boot">${boot}</script><script>${assets.js}</script>`;
+  return documentShell(s.plan.title, assets, body, scripts);
+}
+
+export function renderHome(plans: PlanSummary[], assets: Assets): string {
+  const rows = plans
+    .map(
+      (p) =>
+        `<li class="plan-row"><a class="plan-link" href="${attr(p.url)}" data-testid="plan-link-${attr(p.id)}">${esc(p.title)}</a>` +
+        `<span class="plan-meta">r${p.revision} · ${p.pending} pending · ${esc(presenceLabel(p.presence, 0))}</span></li>`,
+    )
+    .join('');
+  const list = plans.length
+    ? `<ul class="plan-list" data-testid="plan-list">${rows}</ul>`
+    : `<p class="empty" data-testid="home-empty">No plans yet. Ask your agent to open one.</p>`;
+  const body = `<main class="page"><div class="eyebrow">PINPOINT</div><h1 class="plan-title">Plans</h1>${list}</main>`;
+  return documentShell('Pinpoint', assets, body, '');
+}
