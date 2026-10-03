@@ -12,10 +12,10 @@ export function encodeFrame(f: SseFrame): string {
 
 export class SseHub {
   readonly #heartbeatMs: number;
-  readonly #onChange: (() => void) | undefined;
+  readonly #onChange: ((planId: string) => void) | undefined;
   readonly #clients = new Map<string, Set<Client>>();
 
-  constructor(options: { heartbeatMs: number; onChange?: () => void }) {
+  constructor(options: { heartbeatMs: number; onChange?: (planId: string) => void }) {
     this.#heartbeatMs = options.heartbeatMs;
     this.#onChange = options.onChange;
   }
@@ -44,7 +44,7 @@ export class SseHub {
       const set = this.#clients.get(planId);
       set?.delete(client);
       if (set?.size === 0) this.#clients.delete(planId);
-      this.#onChange?.();
+      this.#onChange?.(planId);
     };
 
     const client: Client = {
@@ -58,7 +58,7 @@ export class SseHub {
     const set = this.#clients.get(planId) ?? new Set<Client>();
     set.add(client);
     this.#clients.set(planId, set);
-    this.#onChange?.();
+    this.#onChange?.(planId);
     stream.onClose(release);
     for (const frame of initial) client.send(frame);
     return stream.response;

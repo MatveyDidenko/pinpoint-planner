@@ -42,11 +42,16 @@ export class PlanStore {
     return { state, replaced: true, dropped };
   }
 
-  /** Saves the transition's state before returning; a save failure leaves the stored state untouched. */
-  apply<T extends Transition>(id: string, fn: (s: PlanState, now: string) => T): T {
+  /** Saves the transition's state before returning; a throw from `fn`, `check` or the save leaves the stored state untouched. */
+  apply<T extends Transition>(
+    id: string,
+    fn: (s: PlanState, now: string) => T,
+    check?: (prev: PlanState, transition: T) => void,
+  ): T {
     const current = this.plans.get(id);
     if (current === undefined) throw new StateError('NOT_FOUND', `no plan ${id}`);
     const transition = fn(current, this.clock().toISOString());
+    check?.(current, transition);
     this.commit(id, transition.state);
     return transition;
   }

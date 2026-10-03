@@ -2,17 +2,21 @@ import { openStream } from './stream';
 
 export type PollWhy = 'message' | 'browser_closed' | 'timeout';
 
+export interface PollFinishInfo {
+  woken: number;
+}
+
 interface Waiter {
-  wake(why: PollWhy): void;
+  wake(why: PollWhy, woken?: number): void;
   close(): void;
 }
 
 export class PollHub {
   readonly #heartbeatMs: number;
-  readonly #onChange: (() => void) | undefined;
+  readonly #onChange: ((planId: string) => void) | undefined;
   readonly #waiters = new Map<string, Set<Waiter>>();
 
-  constructor(options: { heartbeatMs: number; onChange?: () => void }) {
+  constructor(options: { heartbeatMs: number; onChange?: (planId: string) => void }) {
     this.#heartbeatMs = options.heartbeatMs;
     this.#onChange = options.onChange;
   }
@@ -28,10 +32,17 @@ export class PollHub {
   }
 
   wake(planId: string, reason: 'message' | 'browser_closed'): void {
-    for (const waiter of [...(this.#waiters.get(planId) ?? [])]) waiter.wake(reason);
+    const waiting = [...(this.#waiters.get(planId) ?? [])];
+    for (const waiter of waiting) waiter.wake(reason, waiting.length);
   }
 
-  listen(planId: string, timeoutMs: number, signal: AbortSignal, finish: (why: PollWhy) => unknown): Response {
+  /** `finish` receives how many pollers were woken together, itself included. */
+  listen(
+    planId: string,
+    timeoutMs: number,
+    signal: AbortSignal,
+    finish: (why: PollWhy, info: PollFinishInfo) => unknown,
+  ): Response {
     const stream = openStream(
       signal,
       {
@@ -52,14 +63,14 @@ export class PollHub {
       const set = this.#waiters.get(planId);
       set?.delete(waiter);
       if (set?.size === 0) this.#waiters.delete(planId);
-      this.#onChange?.();
+      this.#onChange?.(planId);
       return true;
     };
 
     const waiter: Waiter = {
-      wake: (why) => {
+      wake: (why, woken = 1) => {
         if (!release()) return;
-        void settle(why);
+        void settle(why, { woken });
       },
       close: () => {
         release();
@@ -67,9 +78,9 @@ export class PollHub {
       },
     };
 
-    const settle = async (why: PollWhy): Promise<void> => {
+    const settle = async (why: PollWhy, info: PollFinishInfo): Promise<void> => {
       try {
-        stream.end(JSON.stringify(await finish(why)));
+        stream.end(JSON.stringify(await finish(why, info)));
       } catch {
         stream.end();
       }
@@ -78,7 +89,7 @@ export class PollHub {
     const set = this.#waiters.get(planId) ?? new Set<Waiter>();
     set.add(waiter);
     this.#waiters.set(planId, set);
-    this.#onChange?.();
+    this.#onChange?.(planId);
     stream.onClose(release);
     return stream.response;
   }
