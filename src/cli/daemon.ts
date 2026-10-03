@@ -22,12 +22,14 @@ export function buildSpawnArgs(
   };
 }
 
-export function spawnDaemon(o: Config): void {
+export function spawnDaemon(o: Config): number | undefined {
   const { cmd, args, env } = buildSpawnArgs(o);
   mkdirSync(o.stateDir, { recursive: true });
   const fd = openSync(join(o.stateDir, 'helper.log'), 'a');
   try {
-    spawn(cmd, args, { detached: true, stdio: ['ignore', fd, fd], env }).unref();
+    const child = spawn(cmd, args, { detached: true, stdio: ['ignore', fd, fd], env });
+    child.unref();
+    return child.pid;
   } finally {
     closeSync(fd);
   }

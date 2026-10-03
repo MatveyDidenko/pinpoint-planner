@@ -65,7 +65,9 @@ export function realIo(): CliIo {
       await mkdir(dirname(p), { recursive: true });
       await writeFile(p, s);
     },
-    spawnDaemon,
+    spawnDaemon: (o) => {
+      spawnDaemon(o);
+    },
     openBrowser,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date(),
