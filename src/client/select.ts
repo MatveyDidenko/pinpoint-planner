@@ -1,4 +1,5 @@
 import { captureExcerpt } from './excerpt';
+import { postMessage, UNREACHABLE_MESSAGE } from './messages';
 
 export const SELECTED_EVENT = 'pinpoint:selected';
 
@@ -12,6 +13,12 @@ export function isActionTarget(el: Element): boolean {
   return control !== null && !control.matches('[data-action="ask"]');
 }
 
+let selectionLocked = false;
+
+export function lockSelection(): void {
+  selectionLocked = true;
+}
+
 const selectedElements = () => Array.from(document.querySelectorAll(SELECTED_SELECTOR));
 
 export function selectedBlock(): HTMLElement | null {
@@ -23,6 +30,7 @@ function announce(detail: SelectedDetail): void {
 }
 
 export function selectBlock(block: HTMLElement, clickTarget: Element | null = null): void {
+  if (selectionLocked) return;
   for (const other of selectedElements()) {
     if (other !== block) other.removeAttribute('data-selected');
   }
@@ -71,5 +79,31 @@ export function initSelect(): void {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
     if (event.target instanceof Element && event.target.closest('#composer')) return;
     if (!composerHasDraft()) clearSelection();
+  });
+}
+
+function showChooseError(button: HTMLButtonElement, text: string): void {
+  const note = document.createElement('span');
+  note.className = 'choose-note';
+  note.setAttribute('role', 'alert');
+  note.setAttribute('data-testid', `${button.getAttribute('data-testid') ?? 'choose'}-error`);
+  note.textContent = text;
+  button.after(note);
+}
+
+export function initChoose(planId: string): void {
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-action="choose"]');
+    const optionId = button?.closest<HTMLElement>(BLOCK_SELECTOR)?.dataset.block;
+    if (button === null || button.disabled || optionId === undefined) return;
+    button.disabled = true;
+    button.nextElementSibling?.remove();
+    postMessage(planId, { clientId: crypto.randomUUID(), kind: 'choose', blockId: optionId, optionId, text: '' }).catch(
+      (error: unknown) => {
+        button.disabled = false;
+        showChooseError(button, error instanceof Error ? error.message : UNREACHABLE_MESSAGE);
+      },
+    );
   });
 }

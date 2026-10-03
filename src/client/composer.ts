@@ -1,7 +1,7 @@
 import type { BrowserMessage } from '../core/schema';
-import type { PostMessageResponse } from '../shared/frames';
 import { clearDraft, loadDraft, saveDraft } from './draft';
-import { SWAPPED_EVENT, swapBlock } from './patch';
+import { postMessage, UNREACHABLE_MESSAGE } from './messages';
+import { SWAPPED_EVENT } from './patch';
 import { clearSelection, SELECTED_EVENT, type SelectedDetail, selectedBlock } from './select';
 
 export type ComposerKeyAction = 'send' | 'newline' | 'close' | 'none';
@@ -17,18 +17,6 @@ export function composerKeyAction(
   if (event.key === 'Enter') return event.shiftKey ? 'newline' : 'send';
   if (event.key === 'Escape' && textEmpty) return 'close';
   return 'none';
-}
-
-async function failureMessage(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string') {
-      return body.message;
-    }
-  } catch {
-    // body was not JSON; fall through to the status line
-  }
-  return `The server answered ${response.status}.`;
 }
 
 export function initComposer(planId: string): void {
@@ -109,21 +97,11 @@ export function initComposer(planId: string): void {
     sending = true;
     sendButton.disabled = true;
     try {
-      const response = await fetch(`/api/plans/${encodeURIComponent(planId)}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message),
-      });
-      if (!response.ok) {
-        hint.textContent = await failureMessage(response);
-        return;
-      }
-      const result = (await response.json()) as PostMessageResponse;
-      if (result.block !== undefined) swapBlock(result.block.html, result.block.rev);
+      await postMessage(planId, message);
       clearDraft(planId, blockId);
       clearSelection();
-    } catch {
-      hint.textContent = 'Could not reach the Pinpoint server.';
+    } catch (error) {
+      hint.textContent = error instanceof Error ? error.message : UNREACHABLE_MESSAGE;
     } finally {
       sending = false;
       sendButton.disabled = false;

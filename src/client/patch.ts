@@ -1,9 +1,11 @@
 import { shouldApply } from '../shared/frames';
+import { showToast } from './toast';
 
 export const SWAPPED_EVENT = 'pinpoint:swapped';
 
 const UPDATED_CLASS = 'is-updated';
 const UPDATED_FALLBACK_MS = 1200;
+const ENTERING_CLASS = 'stage--entering';
 
 function parseBlock(html: string): HTMLElement | null {
   const template = document.createElement('template');
@@ -20,6 +22,15 @@ function markUpdated(element: HTMLElement): void {
   element.classList.add(UPDATED_CLASS);
   const clear = () => element.classList.remove(UPDATED_CLASS);
   element.addEventListener('animationend', clear, { once: true });
+  setTimeout(clear, UPDATED_FALLBACK_MS);
+}
+
+function revealStage(stage: Element): void {
+  if (!stage.hasAttribute('hidden')) return;
+  stage.removeAttribute('hidden');
+  stage.classList.add(ENTERING_CLASS);
+  const clear = () => stage.classList.remove(ENTERING_CLASS);
+  stage.addEventListener('animationend', clear, { once: true });
   setTimeout(clear, UPDATED_FALLBACK_MS);
 }
 
@@ -50,6 +61,33 @@ export function appendBlock(html: string, after: string | null): HTMLElement | n
   const anchor = after === null ? null : findBlock(after);
   if (anchor !== null && grid.contains(anchor)) anchor.after(next);
   else grid.append(next);
-  grid.closest('[data-stage]')?.removeAttribute('hidden');
+  const stage = grid.closest('[data-stage]');
+  if (stage !== null) revealStage(stage);
+  return next;
+}
+
+function answeredCount(block: Element | null): number {
+  return block?.querySelectorAll('[data-state="answered"]').length ?? 0;
+}
+
+function isOutOfView(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+  return rect.bottom < 0 || rect.top > window.innerHeight;
+}
+
+function jumpTo(block: HTMLElement): void {
+  const motionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  block.scrollIntoView({ block: 'center', behavior: motionAllowed ? 'smooth' : 'auto' });
+  block.focus({ preventScroll: true });
+}
+
+/** Swaps the block like `swapBlock`, and toasts when the swap added an answer to a block outside the viewport. */
+export function swapBlockAnnouncingAnswer(html: string, rev: number): HTMLElement | null {
+  const blockId = parseBlock(html)?.dataset.block;
+  const before = blockId === undefined ? 0 : answeredCount(findBlock(blockId));
+  const next = swapBlock(html, rev);
+  if (next !== null && answeredCount(next) > before && isOutOfView(next)) {
+    showToast(`Answer attached to ${next.dataset.label ?? 'a block'}`, () => jumpTo(next));
+  }
   return next;
 }
