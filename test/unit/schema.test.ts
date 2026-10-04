@@ -90,4 +90,26 @@ describe('schema', () => {
     ]);
     expect(issuePaths(parseBrowserMessage({ ...reply, kind: 'done', text: '' }))).toEqual(['threadId']);
   });
+
+  it('proposal is allowed on ask and rejected on choose and done', () => {
+    const proposal = { nodes: [{ id: 'cache', label: 'Cache', status: 'new' }], edges: [] };
+    const base = { clientId: 'client-01', proposal };
+
+    expect(parseBrowserMessage({ ...base, kind: 'ask', blockId: 'opt-b', text: 'Mine?' }).ok).toBe(true);
+    expect(
+      issuePaths(
+        parseBrowserMessage({
+          ...base,
+          kind: 'ask',
+          blockId: 'opt-b',
+          text: 'Mine?',
+          proposal: { nodes: [], edges: [] },
+        }),
+      ),
+    ).toEqual(['proposal.nodes']);
+    expect(issuePaths(parseBrowserMessage({ ...base, kind: 'choose', optionId: 'opt-b', text: '' }))).toEqual([
+      'proposal',
+    ]);
+    expect(issuePaths(parseBrowserMessage({ ...base, kind: 'done', text: '' }))).toEqual(['proposal']);
+  });
 });

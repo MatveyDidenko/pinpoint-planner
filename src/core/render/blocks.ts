@@ -41,6 +41,12 @@ export function renderExchange(x: Exchange, blockId: string, followup = false): 
     `<div class="exchange exchange--${x.state}${followupClass}" data-testid="qa-${attr(x.id)}" ` +
     `data-state="${x.state}" data-exchange="${attr(x.id)}">`;
   const excerpt = x.excerpt === undefined ? '' : `<blockquote class="excerpt">${esc(x.excerpt)}</blockquote>`;
+  const proposal =
+    x.proposal === undefined
+      ? ''
+      : `<figure class="answer-diagram proposal" data-testid="proposal-${attr(x.id)}">` +
+        `<figcaption class="eyebrow">YOUR VERSION</figcaption>` +
+        `${renderGraphSvg(x.proposal, { markerId: `mk-${blockId}-${x.id}-p`, ariaLabel: 'Your version' })}</figure>`;
   const question = esc(x.question);
 
   if (x.state === 'answered' && x.answer !== undefined) {
@@ -52,13 +58,13 @@ export function renderExchange(x: Exchange, blockId: string, followup = false): 
             ariaLabel: 'Answer diagram',
           })}</figure>`;
     return (
-      `${open}${excerpt}<p class="asked-line">You asked: ${question}</p>` +
+      `${open}${excerpt}${proposal}<p class="asked-line">You asked: ${question}</p>` +
       `<div class="answer">${renderMarkdown(x.answer.md)}</div>${diagram}</div>`
     );
   }
 
   const status = x.state === 'delivered' ? 'Delivered to the agent' : 'Asked';
-  return `${open}${excerpt}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
+  return `${open}${excerpt}${proposal}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
 }
 
 function renderCost({ id, cost }: OptionBlock): string {
@@ -92,6 +98,10 @@ function renderChooseFooter(b: OptionBlock): string {
   }
 }
 
+function editButton(b: Block): string {
+  return `<button type="button" class="edit-btn" data-action="edit-diagram" data-testid="edit-${attr(b.id)}">Edit diagram</button>`;
+}
+
 function renderOption(b: OptionBlock): string {
   const ribbon = b.recommended ? `<span class="ribbon">RECOMMENDED</span>` : '';
   const why = b.recommended && b.why !== undefined ? `<p class="why">${esc(b.why)}</p>` : '';
@@ -104,7 +114,7 @@ function renderOption(b: OptionBlock): string {
     `<h3 class="option-name">${esc(b.name)}</h3>` +
     `<span class="pattern">${esc(b.pattern)}</span>` +
     `</header>` +
-    `<figure class="diagram">${diagram}</figure>` +
+    `<figure class="diagram">${diagram}${editButton(b)}</figure>` +
     `<div class="reuses">${chips}</div>` +
     `${renderCost(b)}` +
     `${why}` +
@@ -117,7 +127,7 @@ function renderFindings(b: FindingsBlock): string {
     b.diagram === undefined
       ? ''
       : `<figure class="diagram">${renderGraphSvg(b.diagram, { markerId: 'mk-findings', ariaLabel: 'Existing code diagram' })}` +
-        `${renderLegend(b.diagram.nodes.map((n) => n.status))}</figure>`;
+        `${renderLegend(b.diagram.nodes.map((n) => n.status))}${editButton(b)}</figure>`;
   const rows = b.items
     .map(
       (item) =>

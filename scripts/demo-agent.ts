@@ -7,6 +7,8 @@ type PollDocument = PollOutput | ReturnType<typeof errorOutput>;
 const REPO_ROOT = resolve(import.meta.dir, '..');
 const CLI = resolve(REPO_ROOT, 'bin/pinpoint.ts');
 const POLL_TIMEOUT_MS = '4000';
+const LISTED_CHANGES = 3;
+const CHANGE_MAX = 60;
 
 const [firstArg, ...flags] = process.argv.slice(2);
 if (firstArg === undefined || firstArg.startsWith('-')) {
@@ -32,10 +34,19 @@ async function cli(args: string[], stdin?: string): Promise<{ code: number; stdo
   return { code, stdout };
 }
 
+// Three changes cut to 60 characters keep the answer under ANSWER_MAX even beside a full excerpt.
+function changeList(changes: string[] = []): string {
+  if (changes.length === 0) return '';
+  const items = changes.slice(0, LISTED_CHANGES).map((change) => `- ${change.slice(0, CHANGE_MAX)}`);
+  const more = changes.length > LISTED_CHANGES ? '\n- …' : '';
+  return `\n\nIn your version you:\n\n${items.join('\n')}${more}`;
+}
+
 function cannedAnswer(message: PollMessage): string {
   const echo = message.excerpt === undefined ? '' : `\n\nYou pointed at: *${message.excerpt.slice(0, 200)}*`;
   const followup = message.thread?.length ? `Follow-up ${message.thread.length + 1} in this thread: ` : '';
-  return `${followup}Short answer from the demo agent: **yes**, and it reuses what is already there.${echo}`;
+  const changes = changeList(message.proposal_changes);
+  return `${followup}Short answer from the demo agent: **yes**, and it reuses what is already there.${echo}${changes}`;
 }
 
 function cannedSteps(optionId: string): string {

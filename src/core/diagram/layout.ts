@@ -16,7 +16,7 @@ export const ARC_H = 40;
 const MIN_NODE_W = 72;
 const MAX_NODE_W = 180;
 
-function round1(n: number): number {
+export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
@@ -67,12 +67,12 @@ function longestPathLayers(g: Graph, back: readonly boolean[]): Map<string, numb
   return layers;
 }
 
-function forwardPath(x1: number, y1: number, x2: number, y2: number): string {
+export function forwardPath(x1: number, y1: number, x2: number, y2: number): string {
   const mid = round1((x1 + x2) / 2);
   return `M${round1(x1)} ${round1(y1)}C${mid} ${round1(y1)} ${mid} ${round1(y2)} ${round1(x2)} ${round1(y2)}`;
 }
 
-function backPath(x1: number, y1: number, x2: number, y2: number): string {
+export function backPath(x1: number, y1: number, x2: number, y2: number): string {
   const ceiling = round1(Math.min(y1, y2) - ARC_H);
   return `M${round1(x1)} ${round1(y1)}C${round1(x1)} ${ceiling} ${round1(x2)} ${ceiling} ${round1(x2)} ${round1(y2)}`;
 }

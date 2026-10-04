@@ -8,6 +8,7 @@ export interface Exchange {
   threadId: string;
   question: string;
   excerpt?: string;
+  proposal?: Graph;
   askedAt: string;
   state: 'asked' | 'delivered' | 'answered';
   answer?: { md: string; diagram?: Graph; at: string };
@@ -69,6 +70,7 @@ export interface Message {
   threadId?: string;
   text: string;
   excerpt?: string;
+  proposal?: Graph;
   at: string;
   deliveredAt?: string;
   ackedAt?: string;

@@ -32,8 +32,12 @@ describe('renderGraphSvg', () => {
     expect(svg).toContain('aria-label="Refresh flow"');
     expect(svg).toMatch(/viewBox="0 0 [\d.]+ [\d.]+"/);
     expect(count(svg, /<g class="node node--/g)).toBe(4);
-    expect(svg).toContain('<g class="node node--reused" data-node-id="client" data-node-label="Client">');
-    expect(svg).toContain('<g class="node node--new" data-node-id="api" data-node-label="Token API">');
+    expect(svg).toContain(
+      '<g class="node node--reused" data-node-id="client" data-node-label="Client" data-node-status="reused">',
+    );
+    expect(svg).toContain(
+      '<g class="node node--new" data-node-id="api" data-node-label="Token API" data-node-status="new">',
+    );
     expect(svg).toContain('<g class="node node--changed" data-node-id="store"');
     expect(svg).toContain('<g class="node node--external" data-node-id="idp"');
     expect(svg).toContain('<title>Session store</title>');
@@ -64,6 +68,36 @@ describe('renderGraphSvg', () => {
     expect(first).toContain('id="m&quot;1"');
     expect(renderGraphSvg(hostile, { markerId: 'm"1', ariaLabel: '<script>' })).toBe(first);
     expect(renderGraphSvg(graph, opts)).toBe(renderGraphSvg(graph, opts));
+  });
+
+  it('node and edge elements carry enough attributes to rebuild the graph', () => {
+    const svg = renderGraphSvg(graph, opts);
+    const nodes = [
+      ...svg.matchAll(/<g [^>]*data-node-id="([^"]*)" data-node-label="([^"]*)" data-node-status="([^"]*)"/g),
+    ].map(([, id, label, status]) => ({ id, label, status }));
+    const edges = [
+      ...svg.matchAll(/<path class="edge[^"]*" data-from="([^"]*)" data-to="([^"]*)"(?: data-edge-label="([^"]*)")?/g),
+    ].map(([, from, to, label]) => (label === undefined ? { from, to } : { from, to, label }));
+
+    expect(nodes).toHaveLength(graph.nodes.length);
+    expect(nodes).toEqual(expect.arrayContaining(graph.nodes));
+    expect(edges).toEqual(graph.edges);
+  });
+
+  it('an unlabelled edge has no data-edge-label', () => {
+    const svg = renderGraphSvg(
+      {
+        nodes: [
+          { id: 'a', label: 'A', status: 'new' },
+          { id: 'b', label: 'B', status: 'reused' },
+        ],
+        edges: [{ from: 'a', to: 'b' }],
+      },
+      opts,
+    );
+
+    expect(svg).toContain('<path class="edge" data-from="a" data-to="b" d="');
+    expect(svg).not.toContain('data-edge-label');
   });
 
   it('marker ids come from opts so two diagrams in one block cannot collide', () => {

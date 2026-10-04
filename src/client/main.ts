@@ -1,5 +1,6 @@
 import type { Boot } from '../shared/frames';
 import { initComposer } from './composer';
+import { initDiagramEditor } from './diagram-editor';
 import { connectLive } from './live';
 import { postMessage } from './messages';
 import { appendBlock, swapBlockAnnouncingAnswer } from './patch';
@@ -42,6 +43,7 @@ if (bootText) {
   initTabs();
   initChoose(boot.planId);
   initComposer(boot.planId);
+  initDiagramEditor(boot.planId);
   initDone(boot.planId);
   if (boot.review === 'handed-back') setHandedBack();
   connectLive(boot.planId, boot.revision, {

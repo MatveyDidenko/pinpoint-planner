@@ -85,6 +85,44 @@ test('a follow-up is answered in the same thread by the demo agent', async ({ pa
   }
 });
 
+test("the demo agent's answer lists the changes in the user's version", async ({ page, request }) => {
+  const id = planId();
+  await seedPlan(request, id);
+  await page.goto(`/plans/${id}`);
+  const agent = startDemoAgent(id);
+
+  try {
+    const proposal = {
+      nodes: [
+        { id: 'caller', label: 'Call site', status: 'external' },
+        { id: 'wrapper', label: 'Fetch wrapper', status: 'changed' },
+        { id: 'refresh', label: 'Refresh call', status: 'new' },
+        { id: 'session', label: 'Session store', status: 'reused' },
+        { id: 'api', label: 'Upstream API', status: 'external' },
+      ],
+      edges: [
+        { from: 'caller', to: 'wrapper' },
+        { from: 'wrapper', to: 'refresh', label: 'on 401' },
+        { from: 'refresh', to: 'session' },
+      ],
+    };
+    const posted = await request.post(`/api/plans/${id}/messages`, {
+      data: { clientId: 'e2e-demo-version-0001', kind: 'ask', blockId: 'opt-a', text: 'why not this?', proposal },
+    });
+    expect(posted.ok()).toBe(true);
+
+    const answer = page.locator('[data-block="opt-a"] [data-state="answered"] .answer');
+    await expect(answer).toContainText('Short answer from the demo agent', { timeout: 15_000 });
+    await expect(answer.locator('li')).toHaveText([
+      'renamed API to Upstream API',
+      'removed arrow Fetch wrapper → Upstream API',
+    ]);
+    await expect.poll(agent.exitCode, { timeout: 10_000, message: agent.stderr() }).toBe(0);
+  } finally {
+    agent.child.kill();
+  }
+});
+
 test('choosing in the browser makes the demo agent append steps that appear in stage 04', async ({ page, request }) => {
   const id = planId();
   await page.setViewportSize({ width: 1280, height: 900 });

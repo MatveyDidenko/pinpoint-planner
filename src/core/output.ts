@@ -1,7 +1,8 @@
 import { basename, resolve } from 'node:path';
+import { diffGraphs } from './diagram/diff';
 import type { Presence } from './presence';
-import { ANSWER_MAX, type Issue } from './schema';
-import { blockLabel, findBlock } from './state';
+import { ANSWER_MAX, type Graph, type Issue } from './schema';
+import { blockDiagram, blockLabel, findBlock } from './state';
 import type { Exchange, Message, OptionBlock, PlanState, PlanSummary } from './types';
 
 export type Invocation = string;
@@ -37,6 +38,8 @@ export interface PollMessage {
   thread?: (Pick<Exchange, 'question' | 'excerpt'> & { answer: string })[];
   text: string;
   excerpt?: string;
+  proposal?: Graph;
+  proposal_changes?: string[];
   at: string;
 }
 
@@ -87,6 +90,12 @@ export function pollMessage(m: Message, state: PlanState): PollMessage {
     ...(m.kind === 'ask' ? { thread_id: threadId, thread } : {}),
     text: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
+    ...(m.proposal === undefined
+      ? {}
+      : {
+          proposal: m.proposal,
+          proposal_changes: diffGraphs((block && blockDiagram(block)) ?? { nodes: [], edges: [] }, m.proposal),
+        }),
     at: m.at,
   };
 }
@@ -230,7 +239,11 @@ function messageLine(inv: Invocation, id: string, m: PollMessage): string | unde
     const route = m.thread?.length
       ? `send it to thread ${thread}'s subagent with SendMessage. If that subagent is gone, start one with \`thread\`.`
       : `start a Sonnet subagent for thread ${thread} (Agent tool, model sonnet). Give it the question, the excerpt and \`${show}\`. It returns the answer markdown (≤${ANSWER_MAX} chars) and optionally a graph.`;
-    return `- ${m.id} (${where}): ${route} Then run \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`. If you cannot start subagents, answer it yourself.`;
+    const weigh =
+      m.proposal === undefined
+        ? ''
+        : ' The user attached their own version of this diagram (`proposal_changes`); have the subagent explain why it would or would not work, answer with a diagram when that helps, and patch the block only after the user agrees in the thread.';
+    return `- ${m.id} (${where}): ${route}${weigh} Then run \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`. If you cannot start subagents, answer it yourself.`;
   }
   if (m.kind === 'choose') {
     const option = m.option_id ?? m.block_id ?? '';

@@ -2,6 +2,7 @@ import {
   type AnswerInput,
   type BlockInput,
   type BrowserMessage,
+  type Graph,
   MAX_EXCHANGES,
   type OptionInput,
   type PlanInput,
@@ -38,6 +39,10 @@ export function blockLabel(block: Block): string {
 
 export function findBlock(state: PlanState, id: string): Block | undefined {
   return state.plan.blocks.find((block) => block.id === id);
+}
+
+export function blockDiagram(block: Block): Graph | undefined {
+  return block.kind === 'option' || block.kind === 'findings' ? block.diagram : undefined;
 }
 
 function freshBase(revision: number) {
@@ -144,9 +149,13 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
     if (last === undefined) throw new StateError('NOT_FOUND', `no thread ${m.threadId} on block ${block.id}`);
     if (last.state !== 'answered') throw new StateError('THREAD_BUSY', 'Wait for the answer before replying.');
   }
+  if (m.proposal !== undefined && blockDiagram(block) === undefined) {
+    throw new StateError('KIND_MISMATCH', `block ${block.id} has no diagram to edit`);
+  }
 
   const id = `m-${state.nextMessageSeq}`;
   const threadId = m.threadId ?? id;
+  const proposal = m.proposal === undefined ? {} : { proposal: m.proposal };
   const message: Message = {
     id,
     clientId: m.clientId,
@@ -154,6 +163,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
     blockId: block.id,
     text: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
+    ...proposal,
     at: now,
     threadId,
   };
@@ -162,6 +172,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
     threadId,
     question: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
+    ...proposal,
     askedAt: now,
     state: 'asked',
   };

@@ -1,8 +1,9 @@
 import type { BrowserMessage } from '../core/schema';
+import { DIAGRAM_CHANGED_EVENT, editedProposal, finishProposal } from './diagram-editor';
 import { clearDraft, loadDraft, saveDraft } from './draft';
 import { postMessage, UNREACHABLE_MESSAGE } from './messages';
 import { SWAPPED_EVENT } from './patch';
-import { clearSelection, SELECTED_EVENT, type SelectedDetail, selectedBlock } from './select';
+import { clearSelection, SELECTED_EVENT, type SelectedDetail, selectBlock, selectedBlock } from './select';
 
 export type ComposerKeyAction = 'send' | 'newline' | 'close' | 'none';
 
@@ -25,6 +26,10 @@ export function initComposer(planId: string): void {
 
   const head = document.createElement('p');
   head.className = 'composer-head';
+  const versionChip = document.createElement('p');
+  versionChip.className = 'composer-chip';
+  versionChip.setAttribute('data-testid', 'composer-proposal');
+  versionChip.hidden = true;
   const input = document.createElement('textarea');
   input.setAttribute('data-testid', 'composer-input');
   input.setAttribute('aria-label', 'Your question');
@@ -37,10 +42,11 @@ export function initComposer(planId: string): void {
   sendButton.className = 'composer-send';
   sendButton.setAttribute('data-testid', 'composer-send');
   sendButton.textContent = 'Send';
-  root.replaceChildren(head, input, hint, sendButton);
+  root.replaceChildren(head, versionChip, input, hint, sendButton);
 
   let openBlockId: string | null = null;
   let openThreadId: string | null = null;
+  let versionBlockId: string | null = null;
   let excerpt: string | undefined;
   let excerptEl: HTMLParagraphElement | null = null;
   let sending = false;
@@ -61,6 +67,17 @@ export function initComposer(planId: string): void {
     root.style.top = `${target.getBoundingClientRect().bottom - pageTop + GAP_PX}px`;
   };
 
+  const showVersion = () => {
+    const edited =
+      openBlockId !== null && openThreadId === null && versionBlockId === openBlockId
+        ? editedProposal(openBlockId)
+        : null;
+    versionChip.hidden = edited === null;
+    versionChip.textContent =
+      edited === null ? '' : `With your edited diagram · ${edited.changes} change${edited.changes === 1 ? '' : 's'}`;
+    return edited;
+  };
+
   const showExcerpt = (text: string | undefined) => {
     excerpt = text;
     excerptEl?.remove();
@@ -75,6 +92,8 @@ export function initComposer(planId: string): void {
   const close = () => {
     openBlockId = null;
     openThreadId = null;
+    versionBlockId = null;
+    showVersion();
     showExcerpt(undefined);
     root.hidden = true;
     input.value = '';
@@ -93,6 +112,7 @@ export function initComposer(planId: string): void {
     const label = block.dataset.label ?? openBlockId ?? '';
     head.textContent = openThreadId === null ? `ASK ABOUT ${label}` : `REPLY · ${label}`;
     showExcerpt(text);
+    showVersion();
     root.hidden = false;
     position();
     input.focus();
@@ -101,20 +121,24 @@ export function initComposer(planId: string): void {
   const send = async () => {
     const text = input.value.trim();
     const draft = draftId();
-    if (text === '' || openBlockId === null || draft === null || sending) return;
+    const blockId = openBlockId;
+    if (text === '' || blockId === null || draft === null || sending) return;
+    const edited = showVersion();
     const message: BrowserMessage = {
       clientId: crypto.randomUUID(),
       kind: 'ask',
-      blockId: openBlockId,
+      blockId,
       text,
       ...(excerpt === undefined ? {} : { excerpt }),
       ...(openThreadId === null ? {} : { threadId: openThreadId }),
+      ...(edited === null ? {} : { proposal: edited.proposal }),
     };
     sending = true;
     sendButton.disabled = true;
     try {
       await postMessage(planId, message);
       clearDraft(planId, draft);
+      if (edited !== null) finishProposal(blockId);
       clearSelection();
     } catch (error) {
       hint.textContent = error instanceof Error ? error.message : UNREACHABLE_MESSAGE;
@@ -149,6 +173,17 @@ export function initComposer(planId: string): void {
     clearSelection();
     open(block, undefined, threadId);
   });
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const block = event.target.closest('[data-action="ask-version"]')?.closest<HTMLElement>('[data-block]');
+    if (block === null || block === undefined) return;
+    selectBlock(block);
+    versionBlockId = block.dataset.block ?? null;
+    showVersion();
+  });
+
+  document.addEventListener(DIAGRAM_CHANGED_EVENT, showVersion);
 
   document.addEventListener(SELECTED_EVENT, (event) => {
     const { blockId, excerpt: picked } = (event as CustomEvent<SelectedDetail>).detail;

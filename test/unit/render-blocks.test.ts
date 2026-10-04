@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderBlock, renderExchange } from '../../src/core/render/blocks';
 import { esc } from '../../src/core/render/esc';
-import { parseAnswerInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
+import { type Graph, parseAnswerInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
 import {
   appendSteps,
   attachAnswer,
@@ -268,6 +268,49 @@ describe('renderExchange', () => {
       answer: { md: 'Short answer.', at: ASKED_AT },
     };
     expect(renderExchange(withoutDiagram, 'opt-b')).not.toContain('<figure');
+  });
+
+  const proposal: Graph = {
+    nodes: [
+      { id: 'timer', label: 'Refresh timer', status: 'new' },
+      { id: 'cache', label: 'Cache', status: 'new' },
+    ],
+    edges: [{ from: 'timer', to: 'cache' }],
+  };
+
+  function askedWithProposal(): PlanState {
+    return postMessage(
+      state,
+      { clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'Like this?', proposal },
+      ASKED_AT,
+    ).state;
+  }
+
+  it('an exchange with a proposal renders Your version before the question', () => {
+    const asked = askedWithProposal();
+    const delivered = markDelivered(asked, ['m-1'], ASKED_AT).state;
+    const answered = attachAnswer(delivered, { questionId: 'm-1', md: 'It would work.' }, ASKED_AT).state;
+
+    for (const s of [asked, delivered, answered]) {
+      const html = renderExchange(exchangeOf(s), 'opt-b');
+      expect(html).toContain(
+        '<figure class="answer-diagram proposal" data-testid="proposal-m-1"><figcaption class="eyebrow">YOUR VERSION</figcaption><svg ',
+      );
+      expect(html).toContain('<marker id="mk-opt-b-m-1-p"');
+      expect(html).toContain('data-node-label="Cache"');
+      expect(html.indexOf('data-testid="proposal-m-1"')).toBeLessThan(html.indexOf('You asked:'));
+    }
+    expect(renderExchange(exchangeOf(askedState()), 'opt-b')).not.toContain('proposal');
+  });
+
+  it('an answered exchange with a proposal and an answer diagram uses two distinct marker ids', () => {
+    const answered = attachAnswer(askedWithProposal(), answerFixture(), ASKED_AT).state;
+    const html = renderExchange(exchangeOf(answered), 'opt-b');
+
+    expect(html.match(/<marker id="mk-opt-b-m-1-p"/g)).toHaveLength(1);
+    expect(html.match(/<marker id="mk-opt-b-m-1"/g)).toHaveLength(1);
+    expect(html.match(/marker-end="url\(#mk-opt-b-m-1-p\)"/g)).toHaveLength(proposal.edges.length);
+    expect(html.match(/marker-end="url\(#mk-opt-b-m-1\)"/g)).toHaveLength(answerFixture().diagram?.edges.length ?? -1);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   type BlockInput,
   type BrowserMessage,
   type Finding,
+  type Graph,
   MAX_EXCHANGES,
   type OptionInput,
   type PlanInput,
@@ -230,6 +231,33 @@ describe('postMessage ask', () => {
     expect(error).toBeInstanceOf(StateError);
     expect((error as StateError).code).toBe('BLOCK_FULL');
     expect(state.messages).toHaveLength(MAX_EXCHANGES);
+  });
+
+  const proposal: Graph = {
+    nodes: [
+      { id: 'timer', label: 'Refresh timer', status: 'new' },
+      { id: 'cache', label: 'Cache', status: 'new' },
+    ],
+    edges: [{ from: 'timer', to: 'cache' }],
+  };
+
+  it('an ask with a proposal stores it on the exchange and the message', () => {
+    const result = postMessage(
+      openPlan(loadPlan(), NOW),
+      { ...ask('opt-b', 'What about mine?', 'client-01'), proposal },
+      NOW,
+    );
+
+    expect(result.message.proposal).toEqual(proposal);
+    expect(findBlock(result.state, 'opt-b')?.qa[0]?.proposal).toEqual(proposal);
+  });
+
+  it('a proposal on the verdict throws KIND_MISMATCH', () => {
+    const state = openPlan(loadPlan(), NOW);
+    const onVerdict = { ...ask('verdict', 'Like this?', 'client-01'), proposal };
+
+    expect(() => postMessage(state, onVerdict, NOW)).toThrow('block verdict has no diagram to edit');
+    expect(thrownCode(() => postMessage(state, onVerdict, NOW))).toBe('KIND_MISMATCH');
   });
 });
 

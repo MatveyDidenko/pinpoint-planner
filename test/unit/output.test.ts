@@ -24,9 +24,9 @@ import {
   sanitizeLabel,
   statusOutput,
 } from '../../src/core/output';
-import { parsePlanInput } from '../../src/core/schema';
-import { appendSteps, attachAnswer, openPlan, postMessage } from '../../src/core/state';
-import type { PlanState } from '../../src/core/types';
+import { type Graph, parsePlanInput } from '../../src/core/schema';
+import { appendSteps, attachAnswer, findBlock, openPlan, postMessage } from '../../src/core/state';
+import type { OptionBlock, PlanState } from '../../src/core/types';
 
 const NOW = '2026-10-03T18:02:11.000Z';
 const INV = 'pinpoint';
@@ -155,6 +155,46 @@ describe('pollMessage', () => {
     ]);
   });
 
+  it('an ask with a proposal carries the graph and the change lines', () => {
+    const state = loadState();
+    const { diagram } = findBlock(state, 'opt-b') as OptionBlock;
+    const proposal: Graph = {
+      nodes: [...diagram.nodes, { id: 'cache', label: 'Cache', status: 'new' }],
+      edges: [...diagram.edges, { from: 'refresh', to: 'cache' }],
+    };
+    const asked = postMessage(
+      state,
+      { clientId: 'client-aaaa', kind: 'ask', blockId: 'opt-b', text: 'what about mine?', excerpt: 'retry', proposal },
+      NOW,
+    );
+    const polled = pollMessage(asked.message, asked.state);
+
+    expect(Object.keys(polled)).toEqual([
+      'id',
+      'kind',
+      'block_id',
+      'block_label',
+      'thread_id',
+      'thread',
+      'text',
+      'excerpt',
+      'proposal',
+      'proposal_changes',
+      'at',
+    ]);
+    expect(polled.proposal).toEqual(proposal);
+    expect(polled.proposal_changes).toEqual(['added box Cache (new)', 'added arrow Refresh call → Cache']);
+  });
+
+  it('an ask without a proposal has neither key', () => {
+    const { ask, choose } = withMessages();
+
+    for (const polled of [ask, choose]) {
+      expect(polled).not.toHaveProperty('proposal');
+      expect(polled).not.toHaveProperty('proposal_changes');
+    }
+  });
+
   it('choose and done poll messages carry no thread keys', () => {
     const { choose } = withMessages();
     const done = postMessage(loadState(), { clientId: 'client-cccc', kind: 'done', text: '' }, NOW);
@@ -262,6 +302,28 @@ describe('next_step templates', () => {
       ].join('\n'),
     );
     expect(nextStepForMessages(INV, ID, [choose], 1)).not.toContain(WAIT_LINE);
+  });
+
+  it("an ask with a proposal asks the subagent to weigh the user's version", () => {
+    const weigh =
+      'The user attached their own version of this diagram (`proposal_changes`); have the subagent explain why it would or would not work, answer with a diagram when that helps, and patch the block only after the user agrees in the thread.';
+    const { ask } = withMessages();
+    const proposal: Graph = { nodes: [{ id: 'cache', label: 'Cache', status: 'new' }], edges: [] };
+    const withProposal: PollMessage = { ...ask, proposal, proposal_changes: ['added box Cache (new)'] };
+    const followUp: PollMessage = {
+      ...withProposal,
+      id: 'm-3',
+      thread_id: 'm-1',
+      thread: [{ question: ask.text, answer: 'It retries once.' }],
+      text: 'and mine?',
+    };
+    const lines = nextStepForMessages(INV, ID, [withProposal, followUp], 1).split('\n');
+
+    expect(lines[1]).toBe(NEW_THREAD_LINE.replace(' Then run', ` ${weigh} Then run`));
+    expect(lines[2]).toBe(
+      `- m-3 (Way B): send it to thread m-1's subagent with SendMessage. If that subagent is gone, start one with \`thread\`. ${weigh} Then run \`pinpoint answer auth-refresh --question m-3 --file <answer.json>\`. If you cannot start subagents, answer it yourself.`,
+    );
+    expect(nextStepForMessages(INV, ID, [ask], 1)).not.toContain('proposal_changes');
   });
 
   it('done template names the chosen ways and the unanswered questions', () => {

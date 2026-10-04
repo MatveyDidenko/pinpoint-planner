@@ -156,6 +156,7 @@ export const BrowserMessageSchema = z
     threadId: z.string().regex(BLOCK_ID).optional(),
     text: z.string().max(ANSWER_MAX),
     excerpt: z.string().max(EXCERPT_MAX).optional(),
+    proposal: GraphSchema.optional(),
   })
   .superRefine((message, ctx) => {
     if (message.kind === 'ask') {
@@ -169,6 +170,9 @@ export const BrowserMessageSchema = z
     }
     if (message.threadId !== undefined) {
       ctx.addIssue({ code: 'custom', path: ['threadId'], message: `${message.kind} takes no threadId` });
+    }
+    if (message.proposal !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['proposal'], message: `${message.kind} takes no proposal` });
     }
     if (message.text !== '') ctx.addIssue({ code: 'custom', path: ['text'], message: `${message.kind} takes no text` });
   });
