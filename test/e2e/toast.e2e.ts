@@ -55,3 +55,29 @@ test('no toast when the answered block is already visible', async ({ page, reque
   await expect(page.locator(ANSWERED)).toHaveCount(1);
   await expect(page.getByTestId('toast')).toBeHidden();
 });
+
+test('Jump to an answer on a hidden option switches to its tab', async ({ page, request }) => {
+  const id = planId();
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await seedPlan(request, id);
+  await page.goto(`/plans/${id}`);
+  const card = page.getByTestId('block-opt-b');
+  await expect(card).toBeHidden();
+
+  await request.post(`/api/plans/${id}/messages`, {
+    data: { clientId: 'e2e-ask-toast-b', kind: 'ask', blockId: 'opt-b', text: 'why the timer?' },
+  });
+  await request.post(`/api/plans/${id}/answers`, { data: { questionId: 'm-1', md: 'Because it renews early.' } });
+
+  const toast = page.getByTestId('toast');
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText('Answer attached to Way B · Proactive refresh timer');
+
+  await page.getByTestId('toast-jump').click();
+  await expect(page.getByTestId('tab-opt-b')).toHaveAttribute('aria-selected', 'true');
+  await expect(card).toBeVisible();
+  await expect(card).toBeInViewport();
+  await expect(card).toBeFocused();
+  await expect(page.getByTestId('block-opt-a')).toBeHidden();
+  await expect(toast).toBeHidden();
+});

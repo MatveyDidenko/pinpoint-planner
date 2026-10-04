@@ -4,6 +4,8 @@ import type { Block, Exchange, FindingsBlock, OptionBlock, StepsBlock, VerdictBl
 import { attr, esc } from './esc';
 
 const EFFORT_PIPS = { S: 1, M: 2, L: 3 } as const;
+const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
+const RISK_WORDS = { low: 'Low', medium: 'Medium', high: 'High' } as const;
 const MAX_PIPS = 3;
 
 function blockShell(b: Block, inner: string, modifiers = ''): string {
@@ -59,7 +61,7 @@ export function renderExchange(x: Exchange, blockId: string, followup = false): 
   return `${open}${excerpt}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
 }
 
-function renderCost(cost: OptionBlock['cost']): string {
+function renderCost({ id, cost }: OptionBlock): string {
   const filled = EFFORT_PIPS[cost.effort];
   const pips = Array.from(
     { length: MAX_PIPS },
@@ -67,8 +69,9 @@ function renderCost(cost: OptionBlock['cost']): string {
   ).join('');
   return (
     `<div class="cost">` +
-    `<span class="effort" aria-label="Effort ${cost.effort}">${pips}</span>` +
-    `<span class="pip pip--risk" data-risk="${cost.risk}" aria-label="Risk ${cost.risk}"></span>` +
+    `<span class="effort" aria-hidden="true">${pips}</span>` +
+    `<span class="pip pip--risk" data-risk="${cost.risk}" aria-hidden="true"></span>` +
+    `<span class="cost-label" data-testid="cost-${attr(id)}">${EFFORT_WORDS[cost.effort]} effort · ${RISK_WORDS[cost.risk]} risk</span>` +
     `<span class="cost-note">${esc(cost.note)}</span>` +
     `</div>`
   );
@@ -103,7 +106,7 @@ function renderOption(b: OptionBlock): string {
     `</header>` +
     `<figure class="diagram">${diagram}</figure>` +
     `<div class="reuses">${chips}</div>` +
-    `${renderCost(b.cost)}` +
+    `${renderCost(b)}` +
     `${why}` +
     `<footer class="choose">${renderChooseFooter(b)}</footer>`;
   return blockShell(b, inner, b.recommended ? ' block--recommended' : '');

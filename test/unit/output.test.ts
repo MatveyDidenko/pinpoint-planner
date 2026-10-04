@@ -234,6 +234,13 @@ describe('next_step templates', () => {
     expect(one).not.toContain('Another poll');
   });
 
+  it('messages template shortens a Way D label', () => {
+    const { ask } = withMessages();
+    const wayD: PollMessage = { ...ask, block_id: 'opt-d', block_label: 'Way D · Refresh at each call site' };
+
+    expect(nextStepForMessages(INV, ID, [wayD], 1)).toContain('- m-1 (Way D): ');
+  });
+
   it("messages template sends a new thread to a new subagent and a follow-up to its thread's subagent", () => {
     const { ask, choose } = withMessages();
     const followUp: PollMessage = {

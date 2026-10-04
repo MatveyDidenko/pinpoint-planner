@@ -1,4 +1,5 @@
 import { shouldApply } from '../shared/frames';
+import { showOption } from './tabs';
 import { showToast } from './toast';
 
 export const SWAPPED_EVENT = 'pinpoint:swapped';
@@ -71,11 +72,13 @@ function answeredCount(block: Element | null): number {
 }
 
 function isOutOfView(element: Element): boolean {
+  if (element.getClientRects().length === 0) return true;
   const rect = element.getBoundingClientRect();
   return rect.bottom < 0 || rect.top > window.innerHeight;
 }
 
 function jumpTo(block: HTMLElement): void {
+  if (block.matches('.block--option') && block.dataset.block !== undefined) showOption(block.dataset.block);
   const motionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   block.scrollIntoView({ block: 'center', behavior: motionAllowed ? 'smooth' : 'auto' });
   block.focus({ preventScroll: true });

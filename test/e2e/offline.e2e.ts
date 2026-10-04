@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const LOCAL_HOST = '127.0.0.1';
 const LOCAL_SCHEMES = new Set(['data:', 'blob:']);
@@ -20,6 +20,7 @@ test('no request leaves 127.0.0.1', async ({ page, request }) => {
   await page.goto(`/plans/${id}`);
   await page.evaluate(() => document.fonts.ready);
   await page.getByTestId('theme-toggle').click();
+  await showOption(page, 'opt-b');
   await page.locator('[data-block="opt-b"] .option-name').click();
   await page.getByTestId('composer-input').fill('why the timer?');
   await page.getByTestId('composer-input').press('Enter');

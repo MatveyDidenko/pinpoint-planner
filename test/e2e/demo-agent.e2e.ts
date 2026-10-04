@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = () => `demo-agent-${Date.now()}`;
 
@@ -38,6 +38,7 @@ test('a question typed in the browser is answered in place by the demo agent run
   const agent = startDemoAgent(id);
 
   try {
+    await showOption(page, 'opt-b');
     await page.locator('[data-block="opt-b"] .option-name').click();
     await page.getByTestId('composer-input').fill('why the timer?');
     await page.getByTestId('composer-input').press('Enter');
@@ -57,6 +58,7 @@ test('a follow-up is answered in the same thread by the demo agent', async ({ pa
   const firstRound = startDemoAgent(id);
 
   try {
+    await showOption(page, 'opt-b');
     await page.locator('[data-block="opt-b"] .option-name').click();
     await page.getByTestId('composer-input').fill('why the timer?');
     await page.getByTestId('composer-input').press('Enter');

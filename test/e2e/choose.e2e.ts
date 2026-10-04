@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = () => `choose-${Date.now()}`;
 
@@ -27,6 +27,7 @@ test('choose A shows Steps requested, steps posted through the api appear in sta
   await expect(page.getByTestId('steps-link-opt-a')).toBeVisible();
   await expect(page.getByTestId('choose-opt-a')).toHaveCount(0);
 
+  await showOption(page, 'opt-c');
   await page.getByTestId('choose-opt-c').click();
   await expect(page.locator('[data-block="opt-c"]')).toContainText('Steps requested');
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-c') });
@@ -60,6 +61,7 @@ test('reload keeps both steps blocks and both card states', async ({ page, reque
 
   await page.getByTestId('choose-opt-a').click();
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-a') });
+  await showOption(page, 'opt-c');
   await page.getByTestId('choose-opt-c').click();
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-c') });
   await expect(page.locator('[data-kind=steps]')).toHaveCount(2);
@@ -68,7 +70,9 @@ test('reload keeps both steps blocks and both card states', async ({ page, reque
 
   await expect(page.locator('[data-kind=steps]')).toHaveCount(2);
   await expect(page.getByTestId('steps-link-opt-a')).toBeVisible();
+  await showOption(page, 'opt-c');
   await expect(page.getByTestId('steps-link-opt-c')).toBeVisible();
+  await showOption(page, 'opt-b');
   await expect(page.getByTestId('choose-opt-b')).toBeVisible();
   await expect(page.getByTestId('steps-link-opt-b')).toHaveCount(0);
 });

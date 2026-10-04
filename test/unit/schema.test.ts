@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type PlanInput,
   parseAnswerInput,
   parseBlockInput,
   parseBrowserMessage,
@@ -9,6 +10,7 @@ import {
   parseStepsInput,
   type Result,
 } from '../../src/core/schema';
+import { deriveBlocks } from '../../src/core/state';
 
 const fixturesDir = join(import.meta.dir, '..', 'fixtures');
 
@@ -28,6 +30,26 @@ describe('schema', () => {
     expect(result.value.options.map((option) => option.id)).toEqual(['opt-a', 'opt-b', 'opt-c']);
   });
 
+  function planWithOptions(count: number) {
+    const plan = load('plan.auth-refresh.json') as PlanInput;
+    const [, , last] = plan.options;
+    const extra = ['opt-d', 'opt-e'].map((id) => ({ ...last, id }));
+    return { ...plan, options: [...plan.options, ...extra].slice(0, count) };
+  }
+
+  it('a plan with two or four options parses', () => {
+    expect(parsePlanInput(planWithOptions(2)).ok).toBe(true);
+    const four = parsePlanInput(planWithOptions(4));
+    expect(four.ok).toBe(true);
+    if (!four.ok) return;
+    expect(deriveBlocks(four.value, 1).map((block) => block.label)).toContain('Way D · Refresh at each call site');
+  });
+
+  it('a plan with one or five options fails on options', () => {
+    expect(issuePaths(parsePlanInput(planWithOptions(1)))).toContain('options');
+    expect(issuePaths(parsePlanInput(planWithOptions(5)))).toContain('options');
+  });
+
   it.each([
     ['steps.opt-a.json', parseStepsInput],
     ['steps.opt-c.json', parseStepsInput],
@@ -38,7 +60,7 @@ describe('schema', () => {
   });
 
   it.each([
-    ['plan.two-options.json', parsePlanInput, 'options'],
+    ['plan.five-options.json', parsePlanInput, 'options'],
     ['plan.two-recommended.json', parsePlanInput, 'options'],
     ['plan.recommended-without-why.json', parsePlanInput, 'options.0.why'],
     ['plan.duplicate-option-id.json', parsePlanInput, 'options.1.id'],

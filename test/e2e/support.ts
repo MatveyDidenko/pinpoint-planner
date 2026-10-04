@@ -15,3 +15,7 @@ export async function blockHtmlMap(page: Page): Promise<Record<string, string>> 
     Object.fromEntries(blocks.map((block) => [block.getAttribute('data-block') ?? '', block.outerHTML])),
   );
 }
+
+export async function showOption(page: Page, id: string): Promise<void> {
+  await page.getByTestId(`tab-${id}`).click();
+}

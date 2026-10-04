@@ -22,6 +22,10 @@ export interface PostMessageResponse {
   duplicate: boolean;
 }
 
+export function optionTabRule(shownId: string): string {
+  return `.options > .block--option:not([data-block="${shownId}"]){display:none}`;
+}
+
 export function shouldApply(currentRev: number, incomingRev: number): boolean {
   return incomingRev > currentRev;
 }

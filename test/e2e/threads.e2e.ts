@@ -1,5 +1,5 @@
 import { type APIRequestContext, expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = (name: string) => `threads-${name}-${Date.now()}`;
 
@@ -25,6 +25,7 @@ test('Reply under an answer sends a follow-up into the same thread', async ({ pa
   await answer(request, id, 'm-1');
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.getByTestId('reply-m-1').click();
   const composer = page.getByTestId('composer');
   await expect(composer).toBeVisible();
@@ -69,6 +70,7 @@ test('after Done reviewing the Reply button is disabled', async ({ page, request
   await answer(request, id, 'm-1');
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   const reply = page.getByTestId('reply-m-1');
   await expect(reply).toBeEnabled();
   await page.getByTestId('done').click();
@@ -85,6 +87,7 @@ test('a reply rejected as THREAD_BUSY keeps the text and explains why', async ({
   await answer(request, id, 'm-1');
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.getByTestId('reply-m-1').click();
   await page.getByTestId('composer-input').fill('racing reply');
   await ask(request, id, 'e2e-thread-0005', 'sent from elsewhere', 'm-1');

@@ -8,7 +8,9 @@ test.beforeEach(async ({ request }) => {
   await seedPlan(request, PLAN_ID);
 });
 
-test('the fixture plan renders three diagrams, one ribbon, the pick and four stage eyebrows', async ({ page }) => {
+test('the fixture plan renders three diagrams, one visible card, one ribbon, the pick and four stage eyebrows', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`/plans/${PLAN_ID}`);
 
@@ -25,17 +27,10 @@ test('the fixture plan renders three diagrams, one ribbon, the pick and four sta
   ]);
   await expect(page.getByTestId('stage-04')).toBeHidden();
 
-  const boxes = await page.locator('[data-kind="option"]').evaluateAll((cards) =>
-    cards.map((card) => {
-      const { x, y } = card.getBoundingClientRect();
-      return { x, y };
-    }),
-  );
-  expect(boxes).toHaveLength(3);
-  expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
-  const rows = boxes.map((box) => box.y);
-  expect(rows).toEqual([...rows].sort((a, b) => a - b));
-  expect(new Set(rows).size).toBe(3);
+  await expect(page.getByRole('tab')).toHaveCount(3);
+  await expect(page.getByTestId('tab-opt-a')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-kind="option"]:visible')).toHaveCount(1);
+  await expect(page.getByTestId('block-opt-a')).toBeVisible();
 });
 
 test('no horizontal scroll at 390 px', async ({ page }) => {
@@ -48,7 +43,7 @@ test('no horizontal scroll at 390 px', async ({ page }) => {
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
       offenders: Array.from(document.querySelectorAll('body *'))
-        .filter((el) => !el.parentElement?.closest('figure.diagram'))
+        .filter((el) => !el.parentElement?.closest('figure.diagram, .option-tabs'))
         .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
         .map((el) => `${el.tagName.toLowerCase()}.${el.className}`),
     }));
@@ -57,7 +52,7 @@ test('no horizontal scroll at 390 px', async ({ page }) => {
   expect(first.offenders).toEqual([]);
   expect(first.scrollWidth).toBeLessThanOrEqual(first.innerWidth);
 
-  await page.locator('[data-block="opt-b"] .option-name').click();
+  await page.locator('[data-block="opt-a"] .option-name').click();
   const composer = page.getByTestId('composer');
   await expect(composer).toBeVisible();
   const box = await composer.boundingBox();

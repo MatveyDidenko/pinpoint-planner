@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Assets, renderHome, renderPage } from '../../src/core/render/page';
-import { parsePlanInput, parseStepsInput } from '../../src/core/schema';
+import { type PlanInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
 import { appendSteps, openPlan } from '../../src/core/state';
 import type { PlanState, PlanSummary } from '../../src/core/types';
 
@@ -14,8 +14,11 @@ function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', name), 'utf8'));
 }
 
-function loadState(): PlanState {
-  const parsed = parsePlanInput(fixture('plan.auth-refresh.json'));
+function loadState(optionCount = 3): PlanState {
+  const plan = fixture('plan.auth-refresh.json') as PlanInput;
+  const [, , last] = plan.options;
+  const extra = { ...last, id: 'opt-d' };
+  const parsed = parsePlanInput({ ...plan, options: [...plan.options, extra].slice(0, optionCount) });
   if (!parsed.ok) throw new Error('fixture plan is invalid');
   return openPlan(parsed.value, NOW);
 }
@@ -68,6 +71,56 @@ describe('renderPage', () => {
       presence: 'waiting',
       review: 'open',
     });
+  });
+
+  it('stage 02 is titled by the option count', () => {
+    expect(renderPage(loadState(2), assets, opts)).toContain('02 · Two ways');
+    expect(renderPage(loadState(3), assets, opts)).toContain('02 · Three ways');
+    expect(renderPage(loadState(4), assets, opts)).toContain('02 · Four ways');
+  });
+
+  function tabsOf(html: string): string[] {
+    return html.match(/<button[^>]*role="tab"[^>]*>.*?<\/button>/g) ?? [];
+  }
+
+  it('stage 02 renders one tab per option and shows only the recommended card', () => {
+    const html = renderPage(loadState(), assets, opts);
+    const tabs = tabsOf(html);
+
+    expect(tabs).toHaveLength(3);
+    expect(html.indexOf('<div class="option-tabs" role="tablist"')).toBeLessThan(html.indexOf('<div class="options">'));
+    expect(html).toContain(
+      '<style id="option-tab-style">.options > .block--option:not([data-block="opt-a"]){display:none}</style>',
+    );
+    for (const [i, id] of ['opt-a', 'opt-b', 'opt-c'].entries()) {
+      expect(tabs[i]).toContain(`data-testid="tab-${id}"`);
+      expect(tabs[i]).toContain(`aria-controls="block-${id}"`);
+      expect(tabs[i]).toContain(i === 0 ? 'aria-selected="true" tabindex="0"' : 'aria-selected="false" tabindex="-1"');
+    }
+    expect(tabs[0]).toContain('title="A · Refresh inside the fetch wrapper"');
+    expect(tabs[0]).toContain('★');
+    expect(tabs[1]).toContain('>B · Proactive refresh timer<');
+    expect(tabs.slice(1).some((tab) => tab.includes('★'))).toBe(false);
+
+    const state = loadState();
+    for (const block of state.plan.blocks) {
+      if (block.kind === 'option') block.recommended = block.id === 'opt-b';
+    }
+    const flipped = renderPage(state, assets, opts);
+    expect(flipped).toContain('.block--option:not([data-block="opt-b"]){display:none}');
+    expect(tabsOf(flipped)[1]).toContain('aria-selected="true" tabindex="0"');
+    expect(tabsOf(flipped)[1]).toContain('★');
+  });
+
+  it('a tab label with markup is escaped', () => {
+    const state = loadState();
+    const optA = state.plan.blocks.find((block) => block.id === 'opt-a');
+    if (optA?.kind === 'option') optA.name = '<b>"x"</b>';
+    const tab = tabsOf(renderPage(state, assets, opts))[0] ?? '';
+
+    expect(tab).not.toContain('<b>');
+    expect(tab).toContain('title="A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;"');
+    expect(tab).toContain('>A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;<');
   });
 
   it('stage 04 is hidden until a steps block exists', () => {

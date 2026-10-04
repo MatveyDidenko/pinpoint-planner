@@ -5,6 +5,7 @@ import { postMessage } from './messages';
 import { appendBlock, swapBlockAnnouncingAnswer } from './patch';
 import { updatePresenceChip } from './presence-chip';
 import { clearSelection, initChoose, initSelect, lockSelection } from './select';
+import { initTabs } from './tabs';
 import { initTheme, toggleTheme } from './theme';
 
 initTheme();
@@ -38,6 +39,7 @@ const bootText = document.getElementById('pinpoint-boot')?.textContent;
 if (bootText) {
   const boot = JSON.parse(bootText) as Boot;
   initSelect();
+  initTabs();
   initChoose(boot.planId);
   initComposer(boot.planId);
   initDone(boot.planId);

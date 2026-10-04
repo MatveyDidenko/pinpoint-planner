@@ -21,7 +21,7 @@ import {
   type VerdictBlock,
 } from './types';
 
-const LETTERS: readonly Letter[] = ['A', 'B', 'C'];
+const LETTERS: readonly Letter[] = ['A', 'B', 'C', 'D'];
 
 export function blockLabel(block: Block): string {
   switch (block.kind) {

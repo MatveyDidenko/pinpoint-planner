@@ -3,6 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../src/cli/run';
 import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
+import {
+  CostSchema,
+  FindingSchema,
+  FindingsInputSchema,
+  GraphSchema,
+  OptionInputSchema,
+  PlanInputSchema,
+} from '../../src/core/schema';
 import { fakeIo } from '../helpers/fake-io';
 
 const COMMITTED_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
@@ -56,6 +64,30 @@ describe('skill', () => {
     const unknownCommand = validateSkill(`${md}\nTry \`pinpoint frobnicate\` next.\n`);
     expect(unknownCommand.map((issue) => issue.path)).toEqual(['body']);
     expect(unknownCommand[0]?.message).toContain('frobnicate');
+  });
+
+  it('the skill asks for two to four ways and never says exactly three', () => {
+    const md = createSkillMarkdown({ invocation: 'pinpoint' });
+
+    expect(md).toMatch(/^description: .*two to four drawn options/m);
+    expect(md).toMatch(/^3\. .*Draw the real ways, two to four; never pad to reach a count\./m);
+    expect(md).not.toMatch(/exactly three|three (drawn )?(options|ways)/i);
+  });
+
+  it('the skill names every plan input key and does not call example plan', () => {
+    const md = createSkillMarkdown({ invocation: 'pinpoint' });
+    const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
+    const keys = [
+      PlanInputSchema,
+      FindingsInputSchema,
+      FindingSchema,
+      OptionInputSchema,
+      CostSchema,
+      GraphSchema,
+    ].flatMap((schema) => Object.keys(schema.shape));
+
+    for (const key of keys) expect(rule3).toMatch(new RegExp(`[{,\\s]${key}[?:,}]`));
+    expect(md).not.toContain('example plan');
   });
 
   it('the skill routes each thread to its own subagent and keeps the main agent the only writer', () => {

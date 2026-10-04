@@ -167,7 +167,7 @@ describe('examples', () => {
 
 describe('run open', () => {
   const planText = () => JSON.stringify(fixture('plan.auth-refresh'));
-  const invalidText = () => JSON.stringify(fixture('invalid/plan.two-options'));
+  const invalidText = () => JSON.stringify(fixture('invalid/plan.five-options'));
 
   function openIo(t: TestApp, opened: string[], over: Partial<CliIo> = {}) {
     return cliIo(t, {
@@ -510,7 +510,7 @@ describe('skill --install', () => {
     const md = custom.written[0]?.content as string;
     expect(md).toBe(createSkillMarkdown({ invocation: prefix }));
     expect(md.split('\n')).toContain(`allowed-tools: Bash(${prefix}:*)`);
-    expect(md).toContain(`\`${prefix} example plan\``);
+    expect(md).toContain(`\`${prefix} open <file>\``);
     expect(validateSkill(md)).toEqual([]);
     expect(onlyDocument(custom.out)).toMatchObject({
       status: 'skill-installed',

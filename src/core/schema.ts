@@ -7,7 +7,8 @@ export const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
 export const SENTENCE_MAX = 160;
 export const ANSWER_MAX = 600;
 export const EXCERPT_MAX = 200;
-export const OPTION_COUNT = 3;
+export const OPTION_MIN = 2;
+export const OPTION_MAX = 4;
 export const MAX_NODES = 8;
 export const MAX_EDGES = 12;
 export const MAX_FINDINGS = 12;
@@ -114,7 +115,7 @@ export const PlanInputSchema = z
     title: z.string().min(1).max(80),
     task: sentence,
     findings: FindingsInputSchema,
-    options: z.array(OptionInputSchema).length(OPTION_COUNT),
+    options: z.array(OptionInputSchema).min(OPTION_MIN).max(OPTION_MAX),
   })
   .superRefine((plan, ctx) => {
     const seen = new Set<string>();

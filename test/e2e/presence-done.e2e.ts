@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = (name: string) => `presence-${name}-${Date.now()}`;
 
@@ -65,6 +65,7 @@ test('Done hands back: chip shows handed back and the composer cannot open', asy
   await expect(page.getByTestId('done')).toBeDisabled();
 
   const block = page.locator('[data-block="opt-b"]');
+  await showOption(page, 'opt-b');
   await page.locator('[data-block="opt-b"] .option-name').click();
   await expect(page.getByTestId('composer')).toBeHidden();
   await expect(block).not.toHaveAttribute('data-selected', '');
@@ -80,6 +81,7 @@ test('a poll after Done returns status done listing the unanswered question', as
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.locator('[data-block="opt-b"] .option-name').click();
   await page.getByTestId('composer-input').fill('why the timer?');
   await page.getByTestId('composer-input').press('Enter');

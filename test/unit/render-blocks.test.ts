@@ -96,6 +96,24 @@ describe('renderBlock option', () => {
     expect(ready).not.toContain('data-action="choose"');
   });
 
+  it('cost spells out effort and risk in words', () => {
+    const medium = renderBlock(option('opt-b'));
+    const small = renderBlock(option('opt-a'));
+
+    expect(medium).toContain('<span class="cost-label" data-testid="cost-opt-b">Medium effort · Medium risk</span>');
+    expect(small).toContain('<span class="cost-label" data-testid="cost-opt-a">Small effort · Low risk</span>');
+    expect(medium).toContain('<span class="effort" aria-hidden="true">');
+    expect(medium).toContain('<span class="pip pip--risk" data-risk="medium" aria-hidden="true">');
+    expect(medium).not.toContain('aria-label="Effort');
+    expect(medium).not.toContain('aria-label="Risk');
+  });
+
+  it('a high-risk large option reads Large effort · High risk', () => {
+    const b = option('opt-c', { cost: { ...option('opt-c').cost, effort: 'L', risk: 'high' } });
+
+    expect(renderBlock(b)).toContain('data-testid="cost-opt-c">Large effort · High risk</span>');
+  });
+
   it('renderBlock is deterministic', () => {
     const b = option('opt-a');
 

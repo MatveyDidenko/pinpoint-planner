@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = () => `drafts-${Date.now()}`;
 
@@ -10,13 +10,16 @@ test('a draft typed on opt-c is restored after reload when opt-c is selected aga
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-c');
   await page.locator(BLOCK('opt-c')).click();
   await page.getByTestId('composer-input').fill('half a thought');
 
   await page.reload();
+  await showOption(page, 'opt-c');
   await page.locator(BLOCK('opt-c')).click();
   await expect(page.getByTestId('composer-input')).toHaveValue('half a thought');
 
+  await showOption(page, 'opt-a');
   await page.locator(BLOCK('opt-a')).click();
   await expect(page.getByTestId('composer-input')).toHaveValue('');
 });
@@ -33,6 +36,7 @@ test('the composer still works when sessionStorage throws', async ({ page, reque
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.locator(BLOCK('opt-b')).click();
   await page.getByTestId('composer-input').fill('still works?');
   const posted = page.waitForRequest(

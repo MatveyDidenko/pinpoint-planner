@@ -219,7 +219,7 @@ export function nextStepBrowserClosed(url: string): string {
 }
 
 function shortLabel(label: string): string {
-  return /^(?:Steps · )?Way [ABC]/.exec(sanitizeLabel(label))?.[0] ?? sanitizeLabel(label);
+  return /^(?:Steps · )?Way [A-D]/.exec(sanitizeLabel(label))?.[0] ?? sanitizeLabel(label);
 }
 
 function messageLine(inv: Invocation, id: string, m: PollMessage): string | undefined {

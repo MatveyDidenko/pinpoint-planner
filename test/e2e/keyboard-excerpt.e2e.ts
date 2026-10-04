@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = () => `keyboard-${Date.now()}`;
 
@@ -63,6 +63,7 @@ test('clicking a diagram node sends its label as the excerpt and the pill shows 
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.locator(OPT_B_NODE).click();
   await expect(page.locator('[data-block="opt-b"]')).toHaveAttribute('data-selected', '');
   await expect(page.locator('#composer .composer-excerpt')).toHaveText('Refresh timer');

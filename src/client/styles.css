@@ -276,6 +276,51 @@ button:disabled {
   margin: 0;
 }
 
+.option-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.option-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(360px, 70vw);
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.option-tab[aria-selected="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--ink);
+}
+
+.option-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.option-tab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option-tab__star {
+  color: var(--accent);
+}
+
 .options {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -465,6 +510,14 @@ button:disabled {
 
 .pip--risk[data-risk="high"] {
   background: var(--hold);
+}
+
+.cost-label {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .cost-note {

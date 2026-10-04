@@ -1,7 +1,7 @@
 import type { Presence } from './presence';
 import type { Cost, Finding, Graph, Step } from './schema';
 
-export type Letter = 'A' | 'B' | 'C';
+export type Letter = 'A' | 'B' | 'C' | 'D';
 
 export interface Exchange {
   id: string;

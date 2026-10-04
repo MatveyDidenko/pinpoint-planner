@@ -201,6 +201,159 @@
         "note": "A long-lived timer needs care around sleeping laptops and multiple tabs."
       },
       "recommended": false
+    },
+    {
+      "id": "opt-c",
+      "name": "Refresh at each call site",
+      "pattern": "Per-call retry",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "Each call site",
+            "status": "changed"
+          },
+          {
+            "id": "retry",
+            "label": "Retry helper",
+            "status": "reused"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "api",
+            "label": "API",
+            "status": "external"
+          }
+        ],
+        "edges": [
+          {
+            "from": "caller",
+            "to": "retry"
+          },
+          {
+            "from": "retry",
+            "to": "refresh",
+            "label": "on 401"
+          },
+          {
+            "from": "retry",
+            "to": "api"
+          }
+        ]
+      },
+      "reuses": ["src/api/retry.ts"],
+      "cost": {
+        "effort": "L",
+        "risk": "medium",
+        "note": "Dozens of call sites change and a new one can silently forget the retry."
+      },
+      "recommended": false
+    },
+    {
+      "id": "opt-d",
+      "name": "Refresh at each call site",
+      "pattern": "Per-call retry",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "Each call site",
+            "status": "changed"
+          },
+          {
+            "id": "retry",
+            "label": "Retry helper",
+            "status": "reused"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "api",
+            "label": "API",
+            "status": "external"
+          }
+        ],
+        "edges": [
+          {
+            "from": "caller",
+            "to": "retry"
+          },
+          {
+            "from": "retry",
+            "to": "refresh",
+            "label": "on 401"
+          },
+          {
+            "from": "retry",
+            "to": "api"
+          }
+        ]
+      },
+      "reuses": ["src/api/retry.ts"],
+      "cost": {
+        "effort": "L",
+        "risk": "medium",
+        "note": "Dozens of call sites change and a new one can silently forget the retry."
+      },
+      "recommended": false
+    },
+    {
+      "id": "opt-e",
+      "name": "Refresh at each call site",
+      "pattern": "Per-call retry",
+      "diagram": {
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "Each call site",
+            "status": "changed"
+          },
+          {
+            "id": "retry",
+            "label": "Retry helper",
+            "status": "reused"
+          },
+          {
+            "id": "refresh",
+            "label": "Refresh call",
+            "status": "new"
+          },
+          {
+            "id": "api",
+            "label": "API",
+            "status": "external"
+          }
+        ],
+        "edges": [
+          {
+            "from": "caller",
+            "to": "retry"
+          },
+          {
+            "from": "retry",
+            "to": "refresh",
+            "label": "on 401"
+          },
+          {
+            "from": "retry",
+            "to": "api"
+          }
+        ]
+      },
+      "reuses": ["src/api/retry.ts"],
+      "cost": {
+        "effort": "L",
+        "risk": "medium",
+        "note": "Dozens of call sites change and a new one can silently forget the retry."
+      },
+      "recommended": false
     }
   ]
 }

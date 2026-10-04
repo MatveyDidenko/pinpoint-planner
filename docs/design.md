@@ -1,7 +1,7 @@
 # Pinpoint — design
 
 Pinpoint turns "plan this change" into a web page of labelled blocks instead of a wall of text. The
-agent (Claude Code) looks at the codebase first, draws three ways to do the job, picks one, and then
+agent (Claude Code) looks at the codebase first, draws two to four ways to do the job, picks one, and then
 answers questions block by block while the user points at the page. The agent stays "on the line"
 through a long-poll to a small helper server on the laptop; nothing leaves the machine.
 
@@ -98,7 +98,7 @@ export const PLAN_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
 export const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;        // option ids; not 'findings' | 'verdict', not /^steps-/
 export const NODE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const SENTENCE_MAX = 160; export const ANSWER_MAX = 600; export const EXCERPT_MAX = 200;
-export const OPTION_COUNT = 3; export const MAX_NODES = 8; export const MAX_EDGES = 12;
+export const OPTION_MIN = 2; export const OPTION_MAX = 4; export const MAX_NODES = 8; export const MAX_EDGES = 12;
 export const MAX_FINDINGS = 12; export const MAX_STEPS = 12; export const MAX_EXCHANGES = 40;
 
 type Status = 'reused' | 'new' | 'changed' | 'external';
@@ -115,7 +115,7 @@ interface OptionInput {
   id: string; name: string /* ≤60 */; pattern: string /* ≤60, what engineers call it */;
   diagram: Graph; reuses: string[] /* ≤8 */; cost: Cost; recommended: boolean; why?: string /* sentence; required iff recommended */
 }
-interface PlanInput { id: string; title: string /* ≤80 */; task: string /* sentence */; findings: FindingsInput; options: OptionInput[] /* exactly 3, unique ids, exactly one recommended */ }
+interface PlanInput { id: string; title: string /* ≤80 */; task: string /* sentence */; findings: FindingsInput; options: OptionInput[] /* two to four (OPTION_MIN..OPTION_MAX), unique ids, exactly one recommended */ }
 interface StepsInput { optionId: string; steps: Step[] /* 1..MAX_STEPS */ }
 interface AnswerInput { questionId: string; md: string /* 1..ANSWER_MAX */; diagram?: Graph }
 type BlockInput = ({ kind: 'findings' } & FindingsInput) | ({ kind: 'option' } & OptionInput) | { kind: 'verdict'; why: string };
@@ -133,10 +133,10 @@ interface Exchange { id: string /* == ask message id */; threadId: string /* == 
 interface BlockBase { id: string; kind: Block['kind']; label: string; rev: number /* 1, +1 per touch */;
   touchedAt: number /* plan revision when last touched */; qa: Exchange[] }
 interface FindingsBlock extends BlockBase { kind: 'findings'; summary: string; items: Finding[]; diagram?: Graph }
-interface OptionBlock extends BlockBase { kind: 'option'; letter: 'A' | 'B' | 'C'; name: string; pattern: string; diagram: Graph;
+interface OptionBlock extends BlockBase { kind: 'option'; letter: 'A' | 'B' | 'C' | 'D'; name: string; pattern: string; diagram: Graph;
   reuses: string[]; cost: Cost; recommended: boolean; why?: string; steps: { state: 'none' | 'requested' | 'ready'; blockId?: string } }
-interface VerdictBlock extends BlockBase { kind: 'verdict'; optionId: string; letter: 'A' | 'B' | 'C'; optionName: string; why: string }
-interface StepsBlock extends BlockBase { kind: 'steps'; optionId: string; letter: 'A' | 'B' | 'C'; optionName: string; steps: Step[] }
+interface VerdictBlock extends BlockBase { kind: 'verdict'; optionId: string; letter: 'A' | 'B' | 'C' | 'D'; optionName: string; why: string }
+interface StepsBlock extends BlockBase { kind: 'steps'; optionId: string; letter: 'A' | 'B' | 'C' | 'D'; optionName: string; steps: Step[] }
 type Block = FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
 
 interface Message { id: string /* 'm-<n>' */; clientId: string; kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
@@ -152,9 +152,9 @@ interface PlanState {
 interface Transition { state: PlanState; touched: string[]; appended?: { blockId: string; after: string | null } }
 ```
 
-Block order is fixed: `findings`, options A–C, `verdict`, then `steps-<optionId>` blocks in the order
+Block order is fixed: `findings`, options A–D (one letter per option, in input order), `verdict`, then `steps-<optionId>` blocks in the order
 they were appended. The page renders them under four numbered stages: 01 What's already here,
-02 Three ways, 03 The pick, 04 Steps.
+02 Two ways / Three ways / Four ways (titled by the option count), 03 The pick, 04 Steps.
 
 Threads: an ask without `threadId` starts a thread whose id is its own message id (`m-7`). An ask with
 `threadId` is a follow-up in that thread on the same block, accepted only once the thread's last
@@ -378,16 +378,29 @@ is "the held line" (questions, waiting, agent working).
   (`data-testid=presence`, `data-state`), "Done reviewing" (`data-action=done`,
   `data-testid=done`), theme toggle (`data-testid=theme-toggle`).
 - **Stages**: `01 · What's already here` (findings block: optional codebase-map diagram, legend,
-  rows `path · ROLE · note`), `02 · Three ways` (three option cards, stacked one per row at every width),
+  rows `path · ROLE · note`), `02 · Three ways` (titled `Two ways`, `Three ways` or `Four ways` by
+  the option count; option tabs above the cards, one card visible at a time, see **Option tabs**),
   `03 · The pick` (verdict callout: 3 px accent left border, "Pick B" chip, the why), `04 · Steps`
   (hidden until the first steps block; `repeat(auto-fit, minmax(320px, 1fr))` grid so a second
   chosen option lands beside the first).
 - **Option card**: letter badge, name, pattern tag ("what engineers call it"), diagram (reused
   nodes filled `--accent-soft`, new dashed `--hold`, changed `--accent` stroke, external `--faint`),
-  reuses as mono chips, cost row (effort pips 1–3, risk pip, sentence), footer "Choose this way"
+  reuses as mono chips, cost row (effort pips 1–3 and a risk pip, both `aria-hidden`, then the words
+  `<span class="cost-label" data-testid="cost-<id>">Medium effort · Low risk</span>` with S/M/L read
+  as Small/Medium/Large, then the sentence), footer "Choose this way"
   (`data-action=choose`, `data-testid=choose-<id>`). Recommended card: 2 px accent border,
   `RECOMMENDED` ribbon, why line. Server-rendered states: `requested` → button disabled, "Steps
   requested · waiting for the agent"; `ready` → "Steps ready ↓" link to the steps block.
+- **Option tabs**: `<div class="option-tabs" role="tablist">` above `.options`, one
+  `<button role="tab" data-testid="tab-<id>" aria-controls="block-<id>">` per option labelled
+  `<letter> · <name>` (full label in `title`, long names truncate with an ellipsis), a ★ on the
+  recommended tab. Visibility lives in `<style id="option-tab-style">` holding one rule,
+  `.options > .block--option:not([data-block="<shown id>"]){display:none}`, so a live block swap
+  never changes which card shows. The server renders it for the recommended option; the client
+  (`tabs.ts`) rewrites it on a tab click and follows the WAI-ARIA tabs pattern (roving `tabindex`,
+  ArrowLeft/ArrowRight wrap, Home/End). The toast's Jump switches to a hidden option's tab first, and an
+  answer on a hidden option counts as out of view. Active tab: 2 px `--accent` underline, ink text;
+  inactive `--muted`; 44 px tap target. At 390 px the tab row scrolls inside itself, never the page.
 - **Block contract**: `<section class="block" data-block="opt-b" data-kind="option" data-rev="3"
   data-label="Way B · …" tabindex="0" data-testid="block-opt-b">` with a server-rendered Ask button
   (`data-action=ask`, `data-testid=ask-opt-b`, opacity 0 → 1 on hover/focus/selected, always in the
@@ -446,9 +459,13 @@ Body (numbered, imperative):
    a text plan; use Pinpoint.
 2. **Look first**: read the codebase before proposing anything; collect `reuse`, `touch` and
    `context` files with one-line notes. Never propose building what a `reuse` item already does.
-3. **Draw three ways**: `<inv> example plan` and copy the shape. Exactly three options, each a
-   diagram of ≤ 8 nodes with statuses, the pattern name, what it reuses, a cost, and exactly one
+3. **Draw the real ways, two to four; never pad to reach a count.** Each option has a diagram of
+   ≤ 8 nodes with statuses, the pattern name, what it reuses, a cost, and exactly one
    `recommended: true` with a one-line `why`. A diagram carries the structure; a sentence explains it.
+   The rule carries the plan shape itself, so drawing a plan costs no `example plan` call:
+   `{id, title, task, findings:{summary, items:[{path, role, note}], diagram?}, options:[{id, name,
+   pattern, diagram:{nodes, edges}, reuses, cost:{effort, risk, note}, recommended, why?}]}` with the
+   enums spelled out. A skill test checks that every key in the plan schemas appears in this shape.
 4. **Open**: write the JSON to your scratch directory (never into the user's repo) and run
    `<inv> open <file>`. On `error`, fix per `issues` and rerun.
 5. **Stay on the line**: run the poll exactly as `next_step` prints it, as a background Bash
@@ -516,9 +533,10 @@ pins the `verify` command list and the dependency list.
 
 | Functionality | L1 | L2 / L3 | L4 / L5 | L6 |
 |---|---|---|---|---|
-| Plan validation (3 options, 1 recommended, ids, nodes, caps) | schema | plans (400 issues) | run (INVALID_INPUT, exit 1) | — |
+| Plan validation (2–4 options, 1 recommended, ids, nodes, caps) | schema | plans (400 issues) | run (INVALID_INPUT, exit 1) | — |
 | Look-first findings block | render-blocks | plans (page has findings) | — | renders |
 | Three diagrams, one recommended, verdict | layout, svg, render-blocks | blocks.html = renderBlock | — | renders (3 svg, 1 ribbon, verdict) |
+| Option tabs (one card shown, tab switch, keys, live swap keeps the tab, Jump switches tab), cost words | render-page, render-blocks | — | — | renders, tabs, toast |
 | Point and ask (message, pill, excerpt) | state | messages (pill html, dedupe, 404) | — | ask, keyboard-excerpt |
 | Threads (fresh ask starts one, reply joins it, `THREAD_BUSY`, `threadId` only on ask, load backfill) | state, schema, persistence | messages (409 `THREAD_BUSY`) | — | threads |
 | Thread grouping, follow-up styling, Reply button, reply composer, disabled after hand-back | render-blocks | — | — | threads |

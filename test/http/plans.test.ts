@@ -71,7 +71,7 @@ describe('PUT /api/plans/:id', () => {
     expect(garbageBody.code).toBe('INVALID_INPUT');
     expect(garbageBody.issues.length).toBeGreaterThan(0);
 
-    const schema = await put('/api/plans/auth-refresh', fixture('invalid/plan.two-options'));
+    const schema = await put('/api/plans/auth-refresh', fixture('invalid/plan.five-options'));
     expect(schema.status).toBe(400);
     const schemaBody = (await schema.json()) as { code: string; issues: { path: string }[] };
     expect(schemaBody.code).toBe('INVALID_INPUT');

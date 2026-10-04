@@ -1,9 +1,12 @@
+import { optionTabRule } from '../../shared/frames';
 import { type Presence, presenceLabel } from '../presence';
-import type { Block, PlanState, PlanSummary } from '../types';
+import type { Block, OptionBlock, PlanState, PlanSummary } from '../types';
 import { renderBlock } from './blocks';
 import { attr, esc, jsonScript } from './esc';
 
 export type Assets = { css: string; fontCss: string; js: string };
+
+const WAYS_TITLE: Record<number, string> = { 2: 'Two ways', 3: 'Three ways', 4: 'Four ways' };
 
 const HEAD_META = '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
 
@@ -36,6 +39,28 @@ function stage(n: string, title: string, inner: string, hidden = false): string 
   );
 }
 
+function optionTab(option: OptionBlock, shown: OptionBlock): string {
+  const id = attr(option.id);
+  const label = `${option.letter} · ${option.name}`;
+  const selected = option === shown;
+  const name = option.recommended ? ` aria-label="${attr(`${label} · recommended`)}"` : '';
+  const star = option.recommended ? '<span class="option-tab__star" aria-hidden="true">★</span>' : '';
+  return (
+    `<button type="button" role="tab" class="option-tab" data-option="${id}" data-testid="tab-${id}" aria-controls="block-${id}"` +
+    ` aria-selected="${selected}" tabindex="${selected ? 0 : -1}" title="${attr(label)}"${name}>` +
+    `<span class="option-tab__label">${esc(label)}</span>${star}</button>`
+  );
+}
+
+function optionTabs(options: OptionBlock[]): string {
+  const shown = options.find((option) => option.recommended);
+  if (shown === undefined) return '';
+  return (
+    `<style id="option-tab-style">${optionTabRule(attr(shown.id))}</style>` +
+    `<div class="option-tabs" role="tablist" aria-label="Ways">${options.map((option) => optionTab(option, shown)).join('')}</div>`
+  );
+}
+
 function renderAll(blocks: Block[]): string {
   return blocks.map(renderBlock).join('');
 }
@@ -46,12 +71,18 @@ export function renderPage(
   opts: { presence: Presence; undelivered: number; baseUrl: string },
 ): string {
   const blocks = s.plan.blocks;
-  const ofKind = <K extends Block['kind']>(kind: K) => blocks.filter((b) => b.kind === kind);
+  const ofKind = <K extends Block['kind']>(kind: K) =>
+    blocks.filter((b): b is Extract<Block, { kind: K }> => b.kind === kind);
   const hasSteps = ofKind('steps').length > 0;
+  const options = ofKind('option');
 
   const stages =
     stage('01', "What's already here", renderAll(ofKind('findings'))) +
-    stage('02', 'Three ways', `<div class="options">${renderAll(ofKind('option'))}</div>`) +
+    stage(
+      '02',
+      WAYS_TITLE[options.length] ?? `${options.length} ways`,
+      `${optionTabs(options)}<div class="options">${renderAll(options)}</div>`,
+    ) +
     stage('03', 'The pick', renderAll(ofKind('verdict'))) +
     stage('04', 'Steps', `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'))}</div>`, !hasSteps);
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedPlan } from './support';
+import { seedPlan, showOption } from './support';
 
 const planId = () => `ask-${Date.now()}`;
 
@@ -14,6 +14,7 @@ test('click a block, type, Enter → POST /messages observed and the pill reads 
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
 
+  await showOption(page, 'opt-b');
   await page.locator(OPT_B_NAME).click();
   await expect(page.locator('[data-block="opt-b"]')).toHaveAttribute('data-selected', '');
   await expect(page.getByTestId('composer')).toBeVisible();
@@ -52,6 +53,7 @@ test('typed text and focus survive the selected block being swapped by a poll de
   await page.goto(`/plans/${id}`);
   await expect(page.locator(OPT_B_PILL)).toContainText('Asked');
 
+  await showOption(page, 'opt-b');
   await page.locator(OPT_B_NAME).click();
   await page.getByTestId('composer-input').fill('draft text');
 
