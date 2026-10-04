@@ -11,6 +11,7 @@ const EXPECTED_SCRIPTS = {
   'test:cli': 'bun test test/cli',
   'test:daemon': 'bun test test/daemon',
   'test:e2e': 'playwright test',
+  'setup:e2e': 'bunx playwright install chromium',
   'test:coverage': 'bun test --coverage',
   check: 'biome check .',
   'check:fix': 'biome check --write .',
