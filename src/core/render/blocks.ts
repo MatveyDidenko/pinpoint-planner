@@ -13,15 +13,31 @@ function blockShell(b: Block, inner: string, modifiers = ''): string {
     `data-testid="block-${attr(b.id)}">` +
     `<button type="button" class="ask-btn" data-action="ask" data-testid="ask-${attr(b.id)}">Ask</button>` +
     `${inner}` +
-    `<div class="qa" data-testid="qa-${attr(b.id)}">${b.qa.map((x) => renderExchange(x, b.id)).join('')}</div>` +
+    `<div class="qa" data-testid="qa-${attr(b.id)}">${renderThreads(b)}</div>` +
     `</section>`
   );
 }
 
-export function renderExchange(x: Exchange, blockId: string): string {
+function renderThreads(b: Block): string {
+  return Array.from(
+    Map.groupBy(b.qa, (x) => x.threadId),
+    ([threadId, exchanges]) => {
+      const t = attr(threadId);
+      const inner = exchanges.map((x, i) => renderExchange(x, b.id, i > 0)).join('');
+      const reply =
+        exchanges.at(-1)?.state === 'answered'
+          ? `<button type="button" class="reply-btn" data-action="reply" data-thread="${t}" data-testid="reply-${t}">Reply</button>`
+          : '';
+      return `<div class="thread" data-thread="${t}" data-testid="thread-${t}">${inner}${reply}</div>`;
+    },
+  ).join('');
+}
+
+export function renderExchange(x: Exchange, blockId: string, followup = false): string {
+  const followupClass = followup ? ' exchange--followup' : '';
   const open =
-    `<div class="exchange exchange--${x.state}" data-testid="qa-${attr(x.id)}" data-state="${x.state}" ` +
-    `data-exchange="${attr(x.id)}">`;
+    `<div class="exchange exchange--${x.state}${followupClass}" data-testid="qa-${attr(x.id)}" ` +
+    `data-state="${x.state}" data-exchange="${attr(x.id)}">`;
   const excerpt = x.excerpt === undefined ? '' : `<blockquote class="excerpt">${esc(x.excerpt)}</blockquote>`;
   const question = esc(x.question);
 

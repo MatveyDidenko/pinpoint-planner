@@ -37,6 +37,23 @@ function isCurrentState(value: unknown): value is PlanState {
   return typeof value === 'object' && value !== null && (value as { schemaVersion?: unknown }).schemaVersion === 1;
 }
 
+// Plans saved before threads existed have exchanges and asks without a threadId.
+function withThreadIds(state: PlanState): PlanState {
+  return {
+    ...state,
+    plan: {
+      ...state.plan,
+      blocks: state.plan.blocks.map((block) => ({
+        ...block,
+        qa: block.qa.map((exchange) => ({ ...exchange, threadId: exchange.threadId ?? exchange.id })),
+      })),
+    },
+    messages: state.messages.map((message) =>
+      message.kind === 'ask' ? { ...message, threadId: message.threadId ?? message.id } : message,
+    ),
+  };
+}
+
 /** Writes each plan to `<dir>/plans/<id>.json` atomically; `clock` only stamps quarantined corrupt files. */
 export function filePersistence(dir: string, clock: () => Date): Persistence {
   const plansDir = join(dir, 'plans');
@@ -58,7 +75,7 @@ export function filePersistence(dir: string, clock: () => Date): Persistence {
         }
         return null;
       }
-      return isCurrentState(parsed) ? parsed : null;
+      return isCurrentState(parsed) ? withThreadIds(parsed) : null;
     },
     save(id, state) {
       const file = fileFor(id);

@@ -16,6 +16,7 @@ document.addEventListener('click', (event) => {
 function setHandedBack(): void {
   const done = document.querySelector<HTMLButtonElement>('[data-testid="done"]');
   if (done) done.disabled = true;
+  for (const reply of Array.from(document.querySelectorAll<HTMLButtonElement>('.reply-btn'))) reply.disabled = true;
   lockSelection();
   clearSelection();
   updatePresenceChip({ presence: 'handed-back', undelivered: 0 });

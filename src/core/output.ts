@@ -1,8 +1,8 @@
 import { basename, resolve } from 'node:path';
 import type { Presence } from './presence';
-import type { Issue } from './schema';
+import { ANSWER_MAX, type Issue } from './schema';
 import { blockLabel, findBlock } from './state';
-import type { Message, OptionBlock, PlanState, PlanSummary } from './types';
+import type { Exchange, Message, OptionBlock, PlanState, PlanSummary } from './types';
 
 export type Invocation = string;
 
@@ -18,6 +18,7 @@ export type ErrorCode =
   | 'STEPS_EXIST'
   | 'ALREADY_ANSWERED'
   | 'BLOCK_FULL'
+  | 'THREAD_BUSY'
   | 'HANDED_BACK'
   | 'RECOMMENDED_LOCKED'
   | 'KIND_MISMATCH'
@@ -32,6 +33,8 @@ export interface PollMessage {
   block_id?: string;
   block_label?: string;
   option_id?: string;
+  thread_id?: string;
+  thread?: (Pick<Exchange, 'question' | 'excerpt'> & { answer: string })[];
   text: string;
   excerpt?: string;
   at: string;
@@ -69,12 +72,19 @@ export function detectInvocation(argv1: string, execPath: string, env: Record<st
 
 export function pollMessage(m: Message, state: PlanState): PollMessage {
   const block = m.kind === 'ask' && m.blockId !== undefined ? findBlock(state, m.blockId) : undefined;
+  const threadId = m.threadId ?? m.id;
+  const thread = (block?.qa ?? []).flatMap((e) =>
+    e.threadId === threadId && e.id !== m.id && e.answer !== undefined
+      ? [{ question: e.question, ...(e.excerpt === undefined ? {} : { excerpt: e.excerpt }), answer: e.answer.md }]
+      : [],
+  );
   return {
     id: m.id,
     kind: m.kind,
     ...(m.blockId === undefined ? {} : { block_id: m.blockId }),
     ...(block === undefined ? {} : { block_label: sanitizeLabel(blockLabel(block)) }),
     ...(m.optionId === undefined ? {} : { option_id: m.optionId }),
+    ...(m.kind === 'ask' ? { thread_id: threadId, thread } : {}),
     text: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
     at: m.at,
@@ -215,7 +225,12 @@ function shortLabel(label: string): string {
 function messageLine(inv: Invocation, id: string, m: PollMessage): string | undefined {
   if (m.kind === 'ask') {
     const where = m.block_label === undefined ? (m.block_id ?? 'plan') : shortLabel(m.block_label);
-    return `- ${m.id} (${where}): answer with \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`; one or two sentences, a diagram if a picture answers better`;
+    const thread = m.thread_id ?? m.id;
+    const show = `${inv} show ${id}${m.block_id === undefined ? '' : ` --block ${m.block_id}`}`;
+    const route = m.thread?.length
+      ? `send it to thread ${thread}'s subagent with SendMessage. If that subagent is gone, start one with \`thread\`.`
+      : `start a Sonnet subagent for thread ${thread} (Agent tool, model sonnet). Give it the question, the excerpt and \`${show}\`. It returns the answer markdown (≤${ANSWER_MAX} chars) and optionally a graph.`;
+    return `- ${m.id} (${where}): ${route} Then run \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`. If you cannot start subagents, answer it yourself.`;
   }
   if (m.kind === 'choose') {
     const option = m.option_id ?? m.block_id ?? '';
@@ -230,6 +245,9 @@ export function nextStepForMessages(inv: Invocation, id: string, messages: PollM
     'Do not respond to the user yet. Handle each message in order, changing nothing but the block named:',
     ...lines,
     ...(pollers > 1 ? ['Another poll is attached to this plan; coordinate before answering.'] : []),
+    ...(messages.some((m) => m.kind === 'ask')
+      ? ['Start every subagent above in one message and wait for all of them; poll only after every answer is written.']
+      : []),
     pollTail(inv, id),
   ].join('\n');
 }

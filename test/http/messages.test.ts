@@ -68,7 +68,18 @@ describe('POST /api/plans/:id/messages', () => {
     expect(body.issues.length).toBeGreaterThan(0);
   });
 
-  test('ask on an unknown block is 404 and the eleventh ask is 409 BLOCK_FULL', async () => {
+  test('a reply while the thread waits for its answer is 409 THREAD_BUSY', async () => {
+    t = makeTestApp();
+    await seedPlan(t);
+    const first = (await (await post(ask('opt-b', 'why a timer?'))).json()) as { message: { id: string } };
+
+    const res = await post({ ...ask('opt-b', 'and when the laptop sleeps?'), threadId: first.message.id });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ code: 'THREAD_BUSY', message: 'Wait for the answer before replying.' });
+  });
+
+  test('ask on an unknown block is 404 and the forty-first ask is 409 BLOCK_FULL', async () => {
     t = makeTestApp();
     await seedPlan(t);
 
@@ -76,9 +87,9 @@ describe('POST /api/plans/:id/messages', () => {
     expect(unknown.status).toBe(404);
     expect(((await unknown.json()) as { code: string }).code).toBe('NOT_FOUND');
 
-    for (let n = 1; n <= 10; n++) expect((await post(ask('opt-b', `question ${n}`))).status).toBe(200);
-    const eleventh = await post(ask('opt-b', 'question 11'));
-    expect(eleventh.status).toBe(409);
-    expect(((await eleventh.json()) as { code: string }).code).toBe('BLOCK_FULL');
+    for (let n = 1; n <= 40; n++) expect((await post(ask('opt-b', `question ${n}`))).status).toBe(200);
+    const fortyFirst = await post(ask('opt-b', 'question 41'));
+    expect(fortyFirst.status).toBe(409);
+    expect(((await fortyFirst.json()) as { code: string }).code).toBe('BLOCK_FULL');
   });
 });

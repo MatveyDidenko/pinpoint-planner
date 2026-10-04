@@ -18,7 +18,7 @@ Where the plan and this document disagree, the plan wins and this document gets 
    and browser-open are injected, so `bun test` drives the real Hono app, the real CLI and the real
    long-poll in-process with no port, no sleep and no browser. Playwright covers only the DOM glue.
 3. **No walls of text is a schema rule.** Every sentence field is capped at 160 characters, answers
-   at 600, exchanges per block at 10. The renderer cannot produce a paragraph the schema did not
+   at 600, exchanges per block at 40. The renderer cannot produce a paragraph the schema did not
    allow.
 4. **Delivery never destroys.** A poll marks messages delivered; only an answer, appended steps,
    a hand-back or an explicit ack retires them. A killed agent re-runs the poll and loses nothing.
@@ -99,7 +99,7 @@ export const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;        // option ids; not '
 export const NODE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const SENTENCE_MAX = 160; export const ANSWER_MAX = 600; export const EXCERPT_MAX = 200;
 export const OPTION_COUNT = 3; export const MAX_NODES = 8; export const MAX_EDGES = 12;
-export const MAX_FINDINGS = 12; export const MAX_STEPS = 12; export const MAX_EXCHANGES = 10;
+export const MAX_FINDINGS = 12; export const MAX_STEPS = 12; export const MAX_EXCHANGES = 40;
 
 type Status = 'reused' | 'new' | 'changed' | 'external';
 interface GraphNode { id: string; label: string /* 1..40 */; status: Status }
@@ -122,11 +122,13 @@ type BlockInput = ({ kind: 'findings' } & FindingsInput) | ({ kind: 'option' } &
 interface BrowserMessage {
   clientId: string /* ^[A-Za-z0-9_-]{8,64}$, browser-minted idempotency key */;
   kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
-  text: string /* ask: 1..ANSWER_MAX; choose/done: '' */; excerpt?: string /* ≤EXCERPT_MAX */
+  text: string /* ask: 1..ANSWER_MAX; choose/done: '' */; excerpt?: string /* ≤EXCERPT_MAX */;
+  threadId?: string /* ask only: reply into that thread */
 }
 
 // ---------- state (persisted as <stateDir>/plans/<id>.json) ----------
-interface Exchange { id: string /* == ask message id */; question: string; excerpt?: string; askedAt: string;
+interface Exchange { id: string /* == ask message id */; threadId: string /* == the thread's first ask id */;
+  question: string; excerpt?: string; askedAt: string;
   state: 'asked' | 'delivered' | 'answered'; answer?: { md: string; diagram?: Graph; at: string } }
 interface BlockBase { id: string; kind: Block['kind']; label: string; rev: number /* 1, +1 per touch */;
   touchedAt: number /* plan revision when last touched */; qa: Exchange[] }
@@ -138,7 +140,7 @@ interface StepsBlock extends BlockBase { kind: 'steps'; optionId: string; letter
 type Block = FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
 
 interface Message { id: string /* 'm-<n>' */; clientId: string; kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
-  text: string; excerpt?: string; at: string; deliveredAt?: string; ackedAt?: string }
+  threadId?: string /* set on every ask */; text: string; excerpt?: string; at: string; deliveredAt?: string; ackedAt?: string }
 interface PlanState {
   schemaVersion: 1;
   plan: { id: string; title: string; task: string; blocks: Block[] /* render order */; openedAt: string };
@@ -153,6 +155,11 @@ interface Transition { state: PlanState; touched: string[]; appended?: { blockId
 Block order is fixed: `findings`, options A–C, `verdict`, then `steps-<optionId>` blocks in the order
 they were appended. The page renders them under four numbered stages: 01 What's already here,
 02 Three ways, 03 The pick, 04 Steps.
+
+Threads: an ask without `threadId` starts a thread whose id is its own message id (`m-7`). An ask with
+`threadId` is a follow-up in that thread on the same block, accepted only once the thread's last
+exchange is answered, so a thread holds at most one open question. A block's `qa` stays one flat list in
+ask order; the thread is the `threadId` on each exchange.
 
 ### Derivations (`src/core/state.ts`)
 
@@ -173,7 +180,7 @@ Every transition returns a new `PlanState`; untouched blocks keep their object i
 |---|---|---|
 | `openPlan(input, now)` | blocks `[findings, A, B, C, verdict]`, all `rev 1`, `touchedAt 1`, `revision 1`, `review 'open'` | — |
 | `replacePlan(s, input, now)` | rebuild blocks from input; carry `qa` over by matching block id; drop `steps-*` blocks; reset `option.steps` to `none`; ack pending messages whose block no longer exists and return them as `dropped`; keep `revision`, `nextMessageSeq`, `review` | — |
-| `postMessage(s, m, now)` | `ask`: push Message, push Exchange `asked` on the block, touched `[blockId]`. `choose`: option `steps.state = 'requested'`, touched `[optionId]`. `done`: `review = 'handed-back'`, touched `[]`. Same `clientId` → returns the stored message, `duplicate: true`, state unchanged (`toBe`) | `NOT_FOUND`, `BLOCK_FULL` (11th exchange), `NOT_AN_OPTION`, `STEPS_EXIST` (choose when `ready`), `HANDED_BACK` (ask/choose after done) |
+| `postMessage(s, m, now)` | `ask`: push Message, push Exchange `asked` on the block with `threadId = m.threadId ?? id`, touched `[blockId]`. `choose`: option `steps.state = 'requested'`, touched `[optionId]`. `done`: `review = 'handed-back'`, touched `[]`. Same `clientId` → returns the stored message, `duplicate: true`, state unchanged (`toBe`) | `NOT_FOUND` (also a `threadId` with no exchange on that block), `BLOCK_FULL` (41st exchange), `THREAD_BUSY` (the thread's last exchange is not `answered`), `NOT_AN_OPTION`, `STEPS_EXIST` (choose when `ready`), `HANDED_BACK` (ask/choose after done) |
 | `markDelivered(s, ids, now)` | set `deliveredAt` where unset; asked exchanges → `delivered`; touched = those blocks | — |
 | `ackMessages(s, ids, now)` | set `ackedAt`; touched `[]` | `NOT_FOUND` |
 | `attachAnswer(s, a, now)` | exchange → `answered` with answer; acks the ask message; touched `[blockId]` | `NOT_FOUND`, `ALREADY_ANSWERED` |
@@ -234,16 +241,21 @@ pinpoint skill [--check | --install | --out <path>]        generate / verify / i
 Receipt: `{status:"patched"|"answered"|"steps-appended"|"acked", plan_id, touched, revision, untouched_unchanged:true, acked, pending, next_step}`.
 
 Errors: `{status:"error", code, message, issues?, next_step}` with codes `BAD_ARGS | INVALID_INPUT |
-NOT_FOUND | NOT_AN_OPTION | STEPS_EXIST | ALREADY_ANSWERED | BLOCK_FULL | HANDED_BACK |
+NOT_FOUND | NOT_AN_OPTION | STEPS_EXIST | ALREADY_ANSWERED | BLOCK_FULL | THREAD_BUSY | HANDED_BACK |
 RECOMMENDED_LOCKED | KIND_MISMATCH | SERVER_UNREACHABLE | POLL_INTERRUPTED | INVARIANT_VIOLATION | IO`.
 
 ### Poll message shape
 
 ```json
-{"id":"m-7","kind":"ask","block_id":"opt-b","block_label":"Way B · Refresh in the fetch wrapper","text":"why does this arrow go backwards?","excerpt":"retry once","at":"2026-10-03T18:02:11.000Z"}
+{"id":"m-7","kind":"ask","block_id":"opt-b","block_label":"Way B · Refresh in the fetch wrapper","thread_id":"m-7","thread":[],"text":"why does this arrow go backwards?","excerpt":"retry once","at":"2026-10-03T18:02:11.000Z"}
 {"id":"m-8","kind":"choose","block_id":"opt-a","option_id":"opt-a","text":"","at":"…"}
-{"id":"m-9","kind":"done","text":"","at":"…"}
+{"id":"m-10","kind":"ask","block_id":"opt-b","block_label":"…","thread_id":"m-7","thread":[{"question":"why does this arrow go backwards?","excerpt":"retry once","answer":"It retries once…"}],"text":"and on a 401?","at":"…"}
+{"id":"m-11","kind":"done","text":"","at":"…"}
 ```
+
+Every ask carries `thread_id` and `thread`: the earlier answered exchanges of that thread
+(`question`, `excerpt?`, `answer` markdown) in ask order, empty for a fresh question. `choose` and
+`done` carry neither key.
 
 Status rules: a pending `done` → `done`; else any pending → `messages`; cap reached → `waiting`;
 browser grace expired while polling → `browser_closed`.
@@ -255,11 +267,17 @@ browser grace expired while polling → `browser_closed`.
   killed, run it again: messages stay queued until you answer or ack them."
 - opened: "Do not respond to the user yet. The plan is open at <url>. " + POLL_TAIL
 - messages: "Do not respond to the user yet. Handle each message in order, changing nothing but the
-  block named:" then one line per message — ask: "- m-7 (Way B): answer with `<inv> answer <id>
-  --question m-7 --file <answer.json>`; one or two sentences, a diagram if a picture answers better";
-  choose: "- m-8: write the concrete steps for option opt-a (`<inv> example steps` for the shape) and
-  run `<inv> append-steps <id> opt-a --file <steps.json>`"; then POLL_TAIL. When `page.pollers > 1`:
-  "Another poll is attached to this plan; coordinate before answering."
+  block named:" then one line per message. An ask with an empty `thread` starts a subagent: "- m-7
+  (Way B): start a Sonnet subagent for thread m-7 (Agent tool, model sonnet). Give it the question,
+  the excerpt and `<inv> show <id> --block opt-b`. It returns the answer markdown (≤600 chars) and
+  optionally a graph." A follow-up goes back to that subagent: "- m-10 (Way B): send it to thread
+  m-7's subagent with SendMessage. If that subagent is gone, start one with `thread`." Both end "Then
+  run `<inv> answer <id> --question <mid> --file <answer.json>`. If you cannot start subagents, answer
+  it yourself." choose: "- m-8: write the concrete steps for option opt-a (`<inv> example steps` for the
+  shape) and run `<inv> append-steps <id> opt-a --file <steps.json>`". When `page.pollers > 1`:
+  "Another poll is attached to this plan; coordinate before answering." When any ask is present:
+  "Start every subagent above in one message and wait for all of them; poll only after every answer
+  is written.", because a poll re-delivers every unanswered message. Then POLL_TAIL.
 - done: "The user finished reviewing. Stop polling and continue in the conversation. Chosen: Way A.
   Unanswered questions: m-7 (Way B: 'why …')." (the server already acked everything)
 - waiting: "Nothing arrived within the wait cap; nothing was lost. " + POLL_TAIL
@@ -301,7 +319,7 @@ Guards (`src/server/guard.ts`): the URL hostname must be `127.0.0.1`, `localhost
 Mutating routes also reject a present `Origin` whose hostname is not loopback (CSRF from a web page),
 and bodies over 1 MB (413). Error bodies: `{code, message, issues?}`; 400 for `INVALID_INPUT`,
 `NOT_AN_OPTION`, `KIND_MISMATCH`, `RECOMMENDED_LOCKED`; 404 `NOT_FOUND`; 409 `STEPS_EXIST`,
-`ALREADY_ANSWERED`, `BLOCK_FULL`, `HANDED_BACK`; 500 `INVARIANT_VIOLATION`, `IO`.
+`ALREADY_ANSWERED`, `BLOCK_FULL`, `THREAD_BUSY` ("Wait for the answer before replying."), `HANDED_BACK`; 500 `INVARIANT_VIOLATION`, `IO`.
 
 ### Poll handler
 
@@ -342,8 +360,9 @@ the same URL, so a reconnect replays every block touched since boot; the client'
 
 One file per plan, `<stateDir>/plans/<id>.json`, rewritten whole on every transition with
 `writeFileSync(tmp)` + `renameSync(tmp, final)`. Loaded once at boot; a file that fails to parse is
-renamed to `<id>.json.corrupt-<iso>` and skipped, never fatal. `schemaVersion` is checked on load. A
-write failure surfaces as 500 `IO` and the in-memory state is rolled back.
+renamed to `<id>.json.corrupt-<iso>` and skipped, never fatal. `schemaVersion` is checked on load,
+and an exchange or ask saved without a `threadId` loads as its own thread (`threadId = id`). A write
+failure surfaces as 500 `IO` and the in-memory state is rolled back.
 
 ## 6. Browser UX
 
@@ -373,7 +392,7 @@ is "the held line" (questions, waiting, agent working).
   data-label="Way B · …" tabindex="0" data-testid="block-opt-b">` with a server-rendered Ask button
   (`data-action=ask`, `data-testid=ask-opt-b`, opacity 0 → 1 on hover/focus/selected, always in the
   DOM so hover mutates nothing) and a `.qa` slot. The only client-side mutations inside a block are
-  `data-selected` and the `is-updated` class.
+  `data-selected`, the `is-updated` class and, after hand-back, `disabled` on Reply buttons.
 - **Pointing**: click anywhere in a block that is not inside `[data-action], a, button, textarea,
   input`, or press Enter on a focused block → `data-selected`, 2 px accent outline, and the composer
   docks beneath it. One selection at a time; Esc deselects.
@@ -394,6 +413,13 @@ is "the held line" (questions, waiting, agent working).
   into a solid card with the rendered markdown and optional small diagram; `is-updated` plays a 900 ms
   accent-soft sweep. If the block is off-screen, a toast (`data-testid=toast`) "Answer attached to
   Way B · Jump" appears for 6 s. Nothing else on the page re-renders or loses scroll position.
+- **Threads**: the `.qa` slot groups exchanges into `.thread` divs (`data-testid=thread-<thread>`)
+  in first-ask order; every exchange after a thread's first carries `exchange--followup`. A thread
+  whose last exchange is answered ends with a server-rendered Reply button (`data-action=reply`,
+  `data-testid=reply-<thread>`). Reply opens the composer under that thread with heading
+  `REPLY · <label>`, a draft keyed `<block>:<thread>`, and posts the ask with `threadId`. A 409
+  `THREAD_BUSY` keeps the text and shows the server's message as the hint. Hand-back disables every
+  Reply button.
 - **Choose**: posts `choose`; the card re-renders `requested`; when `append-steps` lands, the
   `appended` frame inserts the steps block (stage 04 fades in on first use), the card re-renders
   `ready`. A second choice appends another column.
@@ -411,8 +437,8 @@ is "the held line" (questions, waiting, agent working).
 templates with the placeholder invocation `pinpoint`; `pinpoint skill --check` fails when the
 committed copy drifts. `pinpoint skill --install` writes `~/.claude/skills/pinpoint/SKILL.md` with the
 absolute invocation (`<bun path> <repo>/bin/pinpoint.ts`) baked into the body and into
-`allowed-tools: Bash(<that prefix>:*)`, so Claude Code never prompts for the poll. Hard cap 4000
-characters; frontmatter keys `name`, `description`, `allowed-tools` only.
+`allowed-tools: Bash(<that prefix>:*)`, so Claude Code never prompts for the poll. Hard cap 6000
+characters (`SKILL_MAX_CHARS`); frontmatter keys `name`, `description`, `allowed-tools` only.
 
 Body (numbered, imperative):
 
@@ -429,7 +455,10 @@ Body (numbered, imperative):
    command (`run_in_background: true`, `timeout: 7200000`). Do not talk to the user while it runs.
 6. **When it exits, read stdout completely and follow `next_step` literally.**
 7. **Rules**: change only the block named; use `show --block` before `patch-block`; one poll at a
-   time; stdout JSON is the contract; `--help` and `next_step` are authoritative.
+   time; each question thread gets its own Sonnet subagent and follow-ups go to the same one; you are
+   the only writer (subagents return the answer, you run `answer`); wait for this poll's subagents
+   and write their answers before polling again; stdout JSON is the contract; `help` and `next_step`
+   are authoritative.
 
 ## 8. Testing strategy
 
@@ -491,6 +520,9 @@ pins the `verify` command list and the dependency list.
 | Look-first findings block | render-blocks | plans (page has findings) | — | renders |
 | Three diagrams, one recommended, verdict | layout, svg, render-blocks | blocks.html = renderBlock | — | renders (3 svg, 1 ribbon, verdict) |
 | Point and ask (message, pill, excerpt) | state | messages (pill html, dedupe, 404) | — | ask, keyboard-excerpt |
+| Threads (fresh ask starts one, reply joins it, `THREAD_BUSY`, `threadId` only on ask, load backfill) | state, schema, persistence | messages (409 `THREAD_BUSY`) | — | threads |
+| Thread grouping, follow-up styling, Reply button, reply composer, disabled after hand-back | render-blocks | — | — | threads |
+| Thread history in the poll, subagent routing in `next_step` and the skill | output, skill | — | — | demo-agent (follow-up cites the thread length) |
 | Answer attached to that block only | state (`toBe`), hash | receipts (hash before == after, other block html byte-equal) | run (receipt) | live-patch (outerHTML of every other block identical) |
 | Choose → steps appended, side by side | state | steps (appended.after, 409) | run | choose |
 | Patch a block, verdict re-derived | state | receipts | run (show + patch-block) | — |
@@ -514,11 +546,13 @@ pins the `verify` command list and the dependency list.
 ### E2E specs (`test/e2e`, workers 1, each seeds its own plan id via `request.put`)
 
 `renders`, `live-patch`, `ask`, `keyboard-excerpt`, `drafts`, `choose`, `presence-done`, `toast`,
-`theme`, `reload`, `offline`, `visual`, `demo-agent`. The webServer is `bun src/cli.ts serve
+`theme`, `reload`, `offline`, `visual`, `threads`, `demo-agent`. The webServer is `bun src/cli.ts serve
 --port 4790 --state-dir .e2e-state` with `PINPOINT_NO_OPEN=1`, `url: /health`,
 `reuseExistingServer: !process.env.CI`. `scripts/demo-agent.ts` is the agent side of `demo-agent`:
 it loops `poll --timeout-ms` through the real CLI subprocess and answers asks and chooses with
-canned fixtures, and it is also the hackathon demo driver when Claude is not on the line.
+canned fixtures, and it is also the hackathon demo driver when Claude is not on the line. A follow-up's
+canned answer starts "Follow-up <n+1> in this thread:" with n = `thread.length`, so the spec proves
+the history crossed the real CLI.
 
 ## 9. Out of scope for the MVP
 

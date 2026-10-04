@@ -139,18 +139,27 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
   if (block === undefined) throw new StateError('NOT_FOUND', `no block ${m.blockId ?? '(none)'}`);
   if (block.qa.length >= MAX_EXCHANGES)
     throw new StateError('BLOCK_FULL', `block ${block.id} has ${MAX_EXCHANGES} questions`);
+  if (m.threadId !== undefined) {
+    const last = block.qa.findLast((exchange) => exchange.threadId === m.threadId);
+    if (last === undefined) throw new StateError('NOT_FOUND', `no thread ${m.threadId} on block ${block.id}`);
+    if (last.state !== 'answered') throw new StateError('THREAD_BUSY', 'Wait for the answer before replying.');
+  }
 
+  const id = `m-${state.nextMessageSeq}`;
+  const threadId = m.threadId ?? id;
   const message: Message = {
-    id: `m-${state.nextMessageSeq}`,
+    id,
     clientId: m.clientId,
     kind: 'ask',
     blockId: block.id,
     text: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
     at: now,
+    threadId,
   };
   const exchange: Exchange = {
-    id: message.id,
+    id,
+    threadId,
     question: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
     askedAt: now,

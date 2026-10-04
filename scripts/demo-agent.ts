@@ -34,7 +34,8 @@ async function cli(args: string[], stdin?: string): Promise<{ code: number; stdo
 
 function cannedAnswer(message: PollMessage): string {
   const echo = message.excerpt === undefined ? '' : `\n\nYou pointed at: *${message.excerpt.slice(0, 200)}*`;
-  return `Short answer from the demo agent: **yes**, and it reuses what is already there.${echo}`;
+  const followup = message.thread?.length ? `Follow-up ${message.thread.length + 1} in this thread: ` : '';
+  return `${followup}Short answer from the demo agent: **yes**, and it reuses what is already there.${echo}`;
 }
 
 function cannedSteps(optionId: string): string {

@@ -253,6 +253,78 @@ describe('renderExchange', () => {
   });
 });
 
+function ask(s: PlanState, clientId: string, text: string, threadId?: string): PlanState {
+  const message = { clientId, kind: 'ask' as const, blockId: 'opt-b', text, ...(threadId ? { threadId } : {}) };
+  return postMessage(s, message, ASKED_AT).state;
+}
+
+function answer(s: PlanState, questionId: string): PlanState {
+  return attachAnswer(s, { questionId, md: `Answer to ${questionId}.` }, ASKED_AT).state;
+}
+
+function optB(s: PlanState): string {
+  return renderBlock(findBlock(s, 'opt-b') as OptionBlock);
+}
+
+describe('renderBlock threads', () => {
+  it('exchanges render grouped by thread in ask order', () => {
+    let s = ask(state, 'c-1', 'first thread');
+    s = ask(s, 'c-2', 'second thread');
+    s = answer(s, 'm-1');
+    s = ask(s, 'c-3', 'follow-up on first', 'm-1');
+    const html = optB(s);
+
+    expect(html.match(/<div class="thread"/g)?.length).toBe(2);
+    const order = [
+      '<div class="thread" data-thread="m-1" data-testid="thread-m-1">',
+      'data-testid="qa-m-1"',
+      'data-testid="qa-m-3"',
+      '<div class="thread" data-thread="m-2" data-testid="thread-m-2">',
+      'data-testid="qa-m-2"',
+    ].map((needle) => html.indexOf(needle));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).toContain('<div class="exchange exchange--answered" data-testid="qa-m-1"');
+    expect(html).toContain('<div class="exchange exchange--asked exchange--followup" data-testid="qa-m-3"');
+    expect(html).toContain('<div class="exchange exchange--asked" data-testid="qa-m-2"');
+  });
+
+  it('only a thread whose last exchange is answered carries a Reply button', () => {
+    let s = ask(state, 'c-1', 'answered thread');
+    s = ask(s, 'c-2', 'asked thread');
+    s = ask(s, 'c-3', 'delivered thread');
+    s = markDelivered(s, ['m-3'], ASKED_AT).state;
+    s = answer(s, 'm-1');
+    const html = optB(s);
+
+    const button =
+      '<button type="button" class="reply-btn" data-action="reply" data-thread="m-1" data-testid="reply-m-1">Reply</button>';
+    expect(html).toContain(`${button}</div>`);
+    expect(html.indexOf(button)).toBeGreaterThan(html.indexOf('data-testid="qa-m-1"'));
+    expect(html.indexOf(button)).toBeLessThan(html.indexOf('data-testid="thread-m-2"'));
+    expect(html.match(/class="reply-btn"/g)?.length).toBe(1);
+    expect(html).not.toContain('data-testid="reply-m-2"');
+    expect(html).not.toContain('data-testid="reply-m-3"');
+  });
+
+  it('a thread waiting on a follow-up has no Reply button', () => {
+    let s = answer(ask(state, 'c-1', 'first'), 'm-1');
+    s = ask(s, 'c-2', 'follow-up', 'm-1');
+    expect(optB(s)).not.toContain('class="reply-btn"');
+
+    const html = optB(answer(s, 'm-2'));
+    expect(html.match(/class="reply-btn"/g)?.length).toBe(1);
+    expect(html.indexOf('data-testid="reply-m-1"')).toBeGreaterThan(html.indexOf('data-testid="qa-m-2"'));
+  });
+
+  it('a block with no exchanges still renders an empty qa', () => {
+    const html = optB(state);
+
+    expect(html).toContain('<div class="qa" data-testid="qa-opt-b"></div>');
+    expect(html).not.toContain('class="thread"');
+  });
+});
+
 function stepsInput() {
   const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'steps.opt-a.json'), 'utf8'));
   const parsed = parseStepsInput(raw);

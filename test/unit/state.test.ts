@@ -116,6 +116,7 @@ describe('postMessage ask', () => {
       text: 'Why a timer?',
       excerpt: 'Background renewal',
       at: later,
+      threadId: 'm-1',
     });
     expect(next.messages).toEqual([result.message]);
     expect(next.nextMessageSeq).toBe(2);
@@ -123,7 +124,14 @@ describe('postMessage ask', () => {
 
     const target = findBlock(next, 'opt-b');
     expect(target?.qa).toEqual([
-      { id: 'm-1', question: 'Why a timer?', excerpt: 'Background renewal', askedAt: later, state: 'asked' },
+      {
+        id: 'm-1',
+        threadId: 'm-1',
+        question: 'Why a timer?',
+        excerpt: 'Background renewal',
+        askedAt: later,
+        state: 'asked',
+      },
     ]);
     expect(target?.rev).toBe(2);
     expect(target?.touchedAt).toBe(2);
@@ -135,6 +143,60 @@ describe('postMessage ask', () => {
     expect(prev.revision).toBe(1);
     expect(findBlock(prev, 'opt-b')?.qa).toEqual([]);
     expect(pendingMessages(next).map((m) => m.id)).toEqual(['m-1']);
+  });
+
+  it('a new ask starts its own thread', () => {
+    const result = postMessage(openPlan(loadPlan(), NOW), ask('opt-b', 'Why a timer?', 'client-01'), NOW);
+
+    expect(result.message.threadId).toBe('m-1');
+    expect(findBlock(result.state, 'opt-b')?.qa.map((e) => e.threadId)).toEqual(['m-1']);
+  });
+
+  it('two fresh asks on one block start two threads', () => {
+    let state = openPlan(loadPlan(), NOW);
+    state = postMessage(state, ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+    state = postMessage(state, ask('opt-b', 'Why not the wrapper?', 'client-02'), NOW).state;
+
+    expect(findBlock(state, 'opt-b')?.qa.map((e) => [e.id, e.threadId])).toEqual([
+      ['m-1', 'm-1'],
+      ['m-2', 'm-2'],
+    ]);
+    expect(state.messages.map((m) => m.threadId)).toEqual(['m-1', 'm-2']);
+  });
+
+  it('an ask naming a thread joins it', () => {
+    let state = postMessage(openPlan(loadPlan(), NOW), ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+    state = attachAnswer(state, { questionId: 'm-1', md: 'It renews before expiry.' }, NOW).state;
+    const result = postMessage(state, { ...ask('opt-b', 'Even when asleep?', 'client-02'), threadId: 'm-1' }, NOW);
+
+    expect(result.message).toMatchObject({ id: 'm-2', threadId: 'm-1' });
+    expect(findBlock(result.state, 'opt-b')?.qa.map((e) => [e.id, e.threadId])).toEqual([
+      ['m-1', 'm-1'],
+      ['m-2', 'm-1'],
+    ]);
+  });
+
+  it('an ask naming a thread on another block throws NOT_FOUND', () => {
+    const state = postMessage(openPlan(loadPlan(), NOW), ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+    const misplaced = { ...ask('opt-a', 'Same here?', 'client-02'), threadId: 'm-1' };
+
+    expect(() => postMessage(state, misplaced, NOW)).toThrow('no thread m-1 on block opt-a');
+    expect(thrownCode(() => postMessage(state, misplaced, NOW))).toBe('NOT_FOUND');
+  });
+
+  it('a reply after the answer lands is accepted', () => {
+    let state = postMessage(openPlan(loadPlan(), NOW), ask('opt-b', 'Why a timer?', 'client-01'), NOW).state;
+    state = markDelivered(state, ['m-1'], NOW).state;
+    const reply = { ...ask('opt-b', 'Even when asleep?', 'client-02'), threadId: 'm-1' };
+    expect(thrownCode(() => postMessage(state, reply, NOW))).toBe('THREAD_BUSY');
+
+    state = attachAnswer(state, { questionId: 'm-1', md: 'It renews before expiry.' }, NOW).state;
+    const accepted = postMessage(state, reply, NOW);
+
+    expect(accepted.message.threadId).toBe('m-1');
+    expect(findBlock(accepted.state, 'opt-b')?.qa.map((e) => e.state)).toEqual(['answered', 'asked']);
+    const second = { ...ask('opt-b', 'And then?', 'client-03'), threadId: 'm-1' };
+    expect(thrownCode(() => postMessage(accepted.state, second, NOW))).toBe('THREAD_BUSY');
   });
 
   it('ask on an unknown block throws NOT_FOUND', () => {
@@ -150,7 +212,8 @@ describe('postMessage ask', () => {
     expect((error as StateError).code).toBe('NOT_FOUND');
   });
 
-  it('the eleventh ask on one block throws BLOCK_FULL', () => {
+  it('the forty-first ask on one block throws BLOCK_FULL', () => {
+    expect(MAX_EXCHANGES).toBe(40);
     let state = openPlan(loadPlan(), NOW);
     for (let i = 0; i < MAX_EXCHANGES; i++) {
       state = postMessage(state, ask('opt-a', `Question ${i}`, `client-${i}`), NOW).state;

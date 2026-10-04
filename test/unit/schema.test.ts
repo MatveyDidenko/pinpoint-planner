@@ -55,4 +55,17 @@ describe('schema', () => {
     expect(result.ok).toBe(false);
     expect(issuePaths(result)).toContain(path);
   });
+
+  it('threadId is allowed on ask and rejected on choose and done', () => {
+    const reply = { clientId: 'client-01', threadId: 'm-1' };
+
+    expect(parseBrowserMessage({ ...reply, kind: 'ask', blockId: 'opt-b', text: 'And?' }).ok).toBe(true);
+    expect(
+      issuePaths(parseBrowserMessage({ ...reply, kind: 'ask', blockId: 'opt-b', text: 'And?', threadId: 'M 1' })),
+    ).toEqual(['threadId']);
+    expect(issuePaths(parseBrowserMessage({ ...reply, kind: 'choose', optionId: 'opt-b', text: '' }))).toEqual([
+      'threadId',
+    ]);
+    expect(issuePaths(parseBrowserMessage({ ...reply, kind: 'done', text: '' }))).toEqual(['threadId']);
+  });
 });

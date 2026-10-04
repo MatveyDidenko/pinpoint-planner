@@ -40,14 +40,25 @@ export function initComposer(planId: string): void {
   root.replaceChildren(head, input, hint, sendButton);
 
   let openBlockId: string | null = null;
+  let openThreadId: string | null = null;
   let excerpt: string | undefined;
   let excerptEl: HTMLParagraphElement | null = null;
   let sending = false;
 
-  const position = (block: HTMLElement) => {
+  const draftId = () => (openThreadId === null ? openBlockId : `${openBlockId}:${openThreadId}`);
+
+  const anchor = (): HTMLElement | null => {
+    if (openThreadId !== null) return document.querySelector(`.thread[data-thread="${CSS.escape(openThreadId)}"]`);
+    const block = selectedBlock();
+    return block !== null && block.dataset.block === openBlockId ? block : null;
+  };
+
+  const position = () => {
+    const target = anchor();
+    if (target === null) return;
     const page = root.offsetParent;
     const pageTop = page === null ? 0 : page.getBoundingClientRect().top;
-    root.style.top = `${block.getBoundingClientRect().bottom - pageTop + GAP_PX}px`;
+    root.style.top = `${target.getBoundingClientRect().bottom - pageTop + GAP_PX}px`;
   };
 
   const showExcerpt = (text: string | undefined) => {
@@ -63,42 +74,47 @@ export function initComposer(planId: string): void {
 
   const close = () => {
     openBlockId = null;
+    openThreadId = null;
     showExcerpt(undefined);
     root.hidden = true;
     input.value = '';
     hint.textContent = DEFAULT_HINT;
   };
 
-  const open = (block: HTMLElement, text: string | undefined) => {
-    const blockId = block.dataset.block ?? null;
-    if (blockId !== openBlockId) {
-      input.value = blockId === null ? '' : loadDraft(planId, blockId);
+  const open = (block: HTMLElement, text: string | undefined, threadId: string | null = null) => {
+    const previous = draftId();
+    openBlockId = block.dataset.block ?? null;
+    openThreadId = openBlockId === null ? null : threadId;
+    const next = draftId();
+    if (next !== previous) {
+      input.value = next === null ? '' : loadDraft(planId, next);
       hint.textContent = DEFAULT_HINT;
     }
-    openBlockId = blockId;
-    head.textContent = `ASK ABOUT ${block.dataset.label ?? blockId ?? ''}`;
+    const label = block.dataset.label ?? openBlockId ?? '';
+    head.textContent = openThreadId === null ? `ASK ABOUT ${label}` : `REPLY · ${label}`;
     showExcerpt(text);
     root.hidden = false;
-    position(block);
+    position();
     input.focus();
   };
 
   const send = async () => {
     const text = input.value.trim();
-    if (text === '' || openBlockId === null || sending) return;
-    const blockId = openBlockId;
+    const draft = draftId();
+    if (text === '' || openBlockId === null || draft === null || sending) return;
     const message: BrowserMessage = {
       clientId: crypto.randomUUID(),
       kind: 'ask',
-      blockId,
+      blockId: openBlockId,
       text,
       ...(excerpt === undefined ? {} : { excerpt }),
+      ...(openThreadId === null ? {} : { threadId: openThreadId }),
     };
     sending = true;
     sendButton.disabled = true;
     try {
       await postMessage(planId, message);
-      clearDraft(planId, blockId);
+      clearDraft(planId, draft);
       clearSelection();
     } catch (error) {
       hint.textContent = error instanceof Error ? error.message : UNREACHABLE_MESSAGE;
@@ -109,7 +125,8 @@ export function initComposer(planId: string): void {
   };
 
   input.addEventListener('input', () => {
-    if (openBlockId !== null) saveDraft(planId, openBlockId, input.value);
+    const draft = draftId();
+    if (draft !== null) saveDraft(planId, draft, input.value);
     hint.textContent = DEFAULT_HINT;
   });
 
@@ -123,6 +140,16 @@ export function initComposer(planId: string): void {
 
   sendButton.addEventListener('click', () => void send());
 
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-action="reply"]');
+    const block = button?.closest<HTMLElement>('[data-block]') ?? null;
+    const threadId = button?.dataset.thread;
+    if (button === null || button.disabled || block === null || threadId === undefined) return;
+    clearSelection();
+    open(block, undefined, threadId);
+  });
+
   document.addEventListener(SELECTED_EVENT, (event) => {
     const { blockId, excerpt: picked } = (event as CustomEvent<SelectedDetail>).detail;
     const block = blockId === null ? null : selectedBlock();
@@ -132,12 +159,8 @@ export function initComposer(planId: string): void {
 
   document.addEventListener(SWAPPED_EVENT, (event) => {
     const { blockId } = (event as CustomEvent<{ blockId: string }>).detail;
-    const block = selectedBlock();
-    if (block !== null && block.dataset.block === blockId && openBlockId === blockId) position(block);
+    if (blockId === openBlockId) position();
   });
 
-  window.addEventListener('resize', () => {
-    const block = selectedBlock();
-    if (block !== null && openBlockId !== null) position(block);
-  });
+  window.addEventListener('resize', position);
 }

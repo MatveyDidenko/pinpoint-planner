@@ -18,5 +18,8 @@ Pinpoint shows your plan in the user's browser and sends their questions and cho
    - Change only the block a message names.
    - Run `pinpoint show <id> --block <block-id>` before `pinpoint patch-block`.
    - Run one poll at a time.
+   - Each question thread gets its own Sonnet subagent; follow-ups go to the same one.
+   - You are the only writer: subagents return the answer, you run `answer`.
+   - Wait for this poll's subagents and write their answers before polling again.
    - Treat the stdout JSON as the contract.
    - `pinpoint help` and `next_step` are authoritative.

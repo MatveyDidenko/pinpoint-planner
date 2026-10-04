@@ -6,7 +6,7 @@ import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
 import { fakeIo } from '../helpers/fake-io';
 
 const COMMITTED_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
-const MAX_CHARS = 4000;
+const MAX_CHARS = 6000;
 
 function skillIo(readFile: (p: string) => Promise<string>) {
   const out: string[] = [];
@@ -32,7 +32,7 @@ function onlyDocument(out: string[]): Record<string, unknown> {
 }
 
 describe('skill', () => {
-  it('generated skill validates, fits 4000 chars and equals the committed file', () => {
+  it('generated skill validates, fits 6000 chars and equals the committed file', () => {
     const md = createSkillMarkdown({ invocation: 'pinpoint' });
     expect(validateSkill(md)).toEqual([]);
     expect(md.length).toBeGreaterThan(0);
@@ -40,10 +40,11 @@ describe('skill', () => {
     expect(md).toBe(readFileSync(COMMITTED_PATH, 'utf8'));
   });
 
-  it('a skill over 4000 chars or with an unknown frontmatter key fails validation', () => {
+  it('a skill over 6000 chars or with an unknown frontmatter key fails validation', () => {
     const md = createSkillMarkdown({ invocation: 'pinpoint' });
 
-    const padded = validateSkill(`${md}${'x'.repeat(MAX_CHARS)}`);
+    expect(validateSkill(`${md}${'x'.repeat(MAX_CHARS - md.length)}`)).toEqual([]);
+    const padded = validateSkill(`${md}${'x'.repeat(MAX_CHARS - md.length + 1)}`);
     expect(padded.map((issue) => issue.path)).toEqual(['size']);
 
     const extraKey = validateSkill(md.replace('\n---\n', '\nversion: 1\n---\n'));
@@ -55,6 +56,17 @@ describe('skill', () => {
     const unknownCommand = validateSkill(`${md}\nTry \`pinpoint frobnicate\` next.\n`);
     expect(unknownCommand.map((issue) => issue.path)).toEqual(['body']);
     expect(unknownCommand[0]?.message).toContain('frobnicate');
+  });
+
+  it('the skill routes each thread to its own subagent and keeps the main agent the only writer', () => {
+    const rules = createSkillMarkdown({ invocation: 'pinpoint' }).split('7. **Rules.**')[1] ?? '';
+
+    for (const item of [
+      'Each question thread gets its own Sonnet subagent; follow-ups go to the same one.',
+      'You are the only writer: subagents return the answer, you run `answer`.',
+      "Wait for this poll's subagents and write their answers before polling again.",
+    ])
+      expect(rules).toContain(`\n   - ${item}\n`);
   });
 
   it('skill writes the generated file to the committed path and reports its size', async () => {

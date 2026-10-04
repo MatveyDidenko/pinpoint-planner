@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parsePlanInput } from '../../src/core/schema';
-import { openPlan } from '../../src/core/state';
+import { attachAnswer, openPlan, postMessage } from '../../src/core/state';
 import type { PlanState } from '../../src/core/types';
 import { filePersistence, memoryPersistence, PersistenceError } from '../../src/server/persistence';
 
@@ -53,6 +53,45 @@ describe('filePersistence', () => {
     writeFileSync(join(dir, 'plans', 'p1.json'), JSON.stringify({ ...sampleState(), schemaVersion: 2 }));
 
     expect(filePersistence(dir, CLOCK).load('p1')).toBeNull();
+  });
+
+  it('a plan saved without thread ids loads with each exchange as its own thread', () => {
+    let state = sampleState();
+    state = postMessage(
+      state,
+      { clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'Why a timer?' },
+      NOW,
+    ).state;
+    state = postMessage(
+      state,
+      { clientId: 'client-02', kind: 'ask', blockId: 'opt-b', text: 'And on wake?' },
+      NOW,
+    ).state;
+    state = postMessage(state, { clientId: 'client-03', kind: 'choose', optionId: 'opt-a', text: '' }, NOW).state;
+    const legacy = JSON.stringify(state, (key, value) => (key === 'threadId' ? undefined : value));
+    mkdirSync(join(dir, 'plans'));
+    writeFileSync(join(dir, 'plans', 'p1.json'), legacy);
+
+    expect(legacy).not.toContain('threadId');
+    expect(filePersistence(dir, CLOCK).load('p1')).toEqual(state);
+  });
+
+  it('a plan saved with thread ids loads unchanged', () => {
+    let state = sampleState();
+    state = postMessage(
+      state,
+      { clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'Why a timer?' },
+      NOW,
+    ).state;
+    state = attachAnswer(state, { questionId: 'm-1', md: 'It renews before expiry.' }, NOW).state;
+    state = postMessage(
+      state,
+      { clientId: 'client-02', kind: 'ask', blockId: 'opt-b', text: 'Even when asleep?', threadId: 'm-1' },
+      NOW,
+    ).state;
+    filePersistence(dir, CLOCK).save('p1', state);
+
+    expect(filePersistence(dir, CLOCK).load('p1')).toEqual(state);
   });
 
   it('load of a missing file is null and list of a missing dir is empty', () => {

@@ -800,6 +800,40 @@ figure svg,
   display: none;
 }
 
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exchange--followup {
+  position: relative;
+  margin-left: 16px;
+}
+
+.exchange--followup::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: -10px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+
+.reply-btn {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .exchange {
   min-width: 0;
   padding: 10px 14px;

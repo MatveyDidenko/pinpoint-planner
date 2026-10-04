@@ -12,7 +12,7 @@ export const MAX_NODES = 8;
 export const MAX_EDGES = 12;
 export const MAX_FINDINGS = 12;
 export const MAX_STEPS = 12;
-export const MAX_EXCHANGES = 10;
+export const MAX_EXCHANGES = 40;
 
 const sentence = z.string().min(1).max(SENTENCE_MAX);
 
@@ -152,6 +152,7 @@ export const BrowserMessageSchema = z
     kind: z.enum(['ask', 'choose', 'done']),
     blockId: z.string().regex(BLOCK_ID).optional(),
     optionId: z.string().regex(BLOCK_ID).optional(),
+    threadId: z.string().regex(BLOCK_ID).optional(),
     text: z.string().max(ANSWER_MAX),
     excerpt: z.string().max(EXCERPT_MAX).optional(),
   })
@@ -164,6 +165,9 @@ export const BrowserMessageSchema = z
     }
     if (message.kind === 'choose' && message.optionId === undefined) {
       ctx.addIssue({ code: 'custom', path: ['optionId'], message: 'choose needs an optionId' });
+    }
+    if (message.threadId !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['threadId'], message: `${message.kind} takes no threadId` });
     }
     if (message.text !== '') ctx.addIssue({ code: 'custom', path: ['text'], message: `${message.kind} takes no text` });
   });

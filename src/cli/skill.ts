@@ -3,7 +3,7 @@ import type { Issue } from '../core/schema';
 import { COMMAND_NAMES } from './commands';
 
 export const SKILL_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
-export const SKILL_MAX_CHARS = 4000;
+export const SKILL_MAX_CHARS = 6000;
 
 const FRONTMATTER_KEYS = ['name', 'description', 'allowed-tools'];
 const ALLOWED_TOOLS = /^Bash\((.*):\*\)$/;
@@ -30,6 +30,9 @@ Pinpoint shows your plan in the user's browser and sends their questions and cho
    - Change only the block a message names.
    - Run \`${inv} show <id> --block <block-id>\` before \`${inv} patch-block\`.
    - Run one poll at a time.
+   - Each question thread gets its own Sonnet subagent; follow-ups go to the same one.
+   - You are the only writer: subagents return the answer, you run \`answer\`.
+   - Wait for this poll's subagents and write their answers before polling again.
    - Treat the stdout JSON as the contract.
    - \`${inv} help\` and \`next_step\` are authoritative.
 `;

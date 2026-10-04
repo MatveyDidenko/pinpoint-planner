@@ -38,6 +38,7 @@ const CLI_ERROR_CODES: Record<ErrorCode, true> = {
   STEPS_EXIST: true,
   ALREADY_ANSWERED: true,
   BLOCK_FULL: true,
+  THREAD_BUSY: true,
   HANDED_BACK: true,
   RECOMMENDED_LOCKED: true,
   KIND_MISMATCH: true,

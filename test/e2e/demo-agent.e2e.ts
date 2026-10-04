@@ -50,6 +50,39 @@ test('a question typed in the browser is answered in place by the demo agent run
   }
 });
 
+test('a follow-up is answered in the same thread by the demo agent', async ({ page, request }) => {
+  const id = planId();
+  await seedPlan(request, id);
+  await page.goto(`/plans/${id}`);
+  const firstRound = startDemoAgent(id);
+
+  try {
+    await page.locator('[data-block="opt-b"] .option-name').click();
+    await page.getByTestId('composer-input').fill('why the timer?');
+    await page.getByTestId('composer-input').press('Enter');
+
+    const first = page.locator('[data-testid="thread-m-1"] [data-state="answered"]');
+    await expect(first).toContainText('Short answer from the demo agent', { timeout: 15_000 });
+    await expect(first).not.toContainText('Follow-up');
+    await expect.poll(firstRound.exitCode, { timeout: 10_000, message: firstRound.stderr() }).toBe(0);
+  } finally {
+    firstRound.child.kill();
+  }
+
+  const secondRound = startDemoAgent(id);
+  try {
+    await page.getByTestId('reply-m-1').click();
+    await page.getByTestId('composer-input').fill('and when the laptop wakes?');
+    await page.getByTestId('composer-input').press('Enter');
+
+    const followup = page.locator('[data-testid="thread-m-1"] .exchange--followup[data-state="answered"]');
+    await expect(followup).toContainText('Follow-up 2 in this thread:', { timeout: 15_000 });
+    await expect.poll(secondRound.exitCode, { timeout: 10_000, message: secondRound.stderr() }).toBe(0);
+  } finally {
+    secondRound.child.kill();
+  }
+});
+
 test('choosing in the browser makes the demo agent append steps that appear in stage 04', async ({ page, request }) => {
   const id = planId();
   await page.setViewportSize({ width: 1280, height: 900 });

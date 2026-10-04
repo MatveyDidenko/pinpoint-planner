@@ -91,6 +91,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, ContentfulStatusCode>> = {
   STEPS_EXIST: 409,
   ALREADY_ANSWERED: 409,
   BLOCK_FULL: 409,
+  THREAD_BUSY: 409,
   HANDED_BACK: 409,
   INVARIANT_VIOLATION: 500,
   IO: 500,

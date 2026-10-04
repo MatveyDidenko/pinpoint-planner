@@ -5,6 +5,7 @@ export type Letter = 'A' | 'B' | 'C';
 
 export interface Exchange {
   id: string;
+  threadId: string;
   question: string;
   excerpt?: string;
   askedAt: string;
@@ -65,6 +66,7 @@ export interface Message {
   kind: 'ask' | 'choose' | 'done';
   blockId?: string;
   optionId?: string;
+  threadId?: string;
   text: string;
   excerpt?: string;
   at: string;
@@ -90,6 +92,7 @@ export interface Transition {
 export type StateErrorCode =
   | 'NOT_FOUND'
   | 'BLOCK_FULL'
+  | 'THREAD_BUSY'
   | 'NOT_AN_OPTION'
   | 'STEPS_EXIST'
   | 'HANDED_BACK'
