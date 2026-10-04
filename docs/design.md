@@ -359,7 +359,7 @@ is "the held line" (questions, waiting, agent working).
   (`data-testid=presence`, `data-state`), "Done reviewing" (`data-action=done`,
   `data-testid=done`), theme toggle (`data-testid=theme-toggle`).
 - **Stages**: `01 · What's already here` (findings block: optional codebase-map diagram, legend,
-  rows `path · ROLE · note`), `02 · Three ways` (three option cards, 3 columns ≥ 1100 px, one below),
+  rows `path · ROLE · note`), `02 · Three ways` (three option cards, stacked one per row at every width),
   `03 · The pick` (verdict callout: 3 px accent left border, "Pick B" chip, the why), `04 · Steps`
   (hidden until the first steps block; `repeat(auto-fit, minmax(320px, 1fr))` grid so a second
   chosen option lands beside the first).

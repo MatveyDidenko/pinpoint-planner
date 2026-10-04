@@ -32,10 +32,10 @@ test('the fixture plan renders three diagrams, one ribbon, the pick and four sta
     }),
   );
   expect(boxes).toHaveLength(3);
-  expect(new Set(boxes.map((box) => Math.round(box.y))).size).toBe(1);
-  const columns = boxes.map((box) => box.x);
-  expect(columns).toEqual([...columns].sort((a, b) => a - b));
-  expect(new Set(columns).size).toBe(3);
+  expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
+  const rows = boxes.map((box) => box.y);
+  expect(rows).toEqual([...rows].sort((a, b) => a - b));
+  expect(new Set(rows).size).toBe(3);
 });
 
 test('no horizontal scroll at 390 px', async ({ page }) => {
