@@ -16,7 +16,7 @@ export function clearDraft(planId: string, blockId: string): void {
   try {
     sessionStorage.removeItem(draftKey(planId, blockId));
   } catch {
-    // Storage can be unavailable; the draft just does not persist.
+    // Storage can be unavailable; there is then no stored draft to clear.
   }
 }
 

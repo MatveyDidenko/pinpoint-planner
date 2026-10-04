@@ -80,9 +80,9 @@ function backPath(x1: number, y1: number, x2: number, y2: number): string {
 /**
  * Lays a graph out left to right in longest-path layers.
  *
- * Edges that close a cycle (DFS from nodes in input order, out-edges in input order) are marked `back`, ignored
- * for layering, and drawn as an arc above both nodes. Column x is PAD plus each earlier layer's widest node and
- * GAP_X; nodes stack top-down from PAD in input order, shifted down by ARC_H when any back edge exists.
+ * Edges that close a cycle are marked `back`, ignored for layering, and drawn as an arc above both nodes. Column x
+ * is PAD plus each earlier layer's widest node and GAP_X; nodes stack top-down from PAD in input order, shifted
+ * down by ARC_H when any back edge exists.
  */
 export function layoutGraph(g: Graph): GraphLayout {
   const backFlags = findBackEdges(g);
