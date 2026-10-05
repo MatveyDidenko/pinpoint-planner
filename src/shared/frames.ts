@@ -22,6 +22,17 @@ export interface PostMessageResponse {
   duplicate: boolean;
 }
 
+export type TabDot = 'waiting' | 'answer' | null;
+
+export function optionTabName(tab: { label: string; recommended: boolean; chosen: boolean; dot: TabDot }): string {
+  const extras = [
+    tab.recommended ? 'recommended' : '',
+    tab.chosen ? 'chosen' : '',
+    tab.dot === 'waiting' ? 'question waiting' : tab.dot === 'answer' ? 'new answer' : '',
+  ].filter((extra) => extra !== '');
+  return [tab.label, ...extras].join(', ');
+}
+
 export function optionTabRule(shownId: string): string {
   return `.options > .block--option:not([data-block="${shownId}"]){display:none}`;
 }

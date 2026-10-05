@@ -161,8 +161,8 @@ function parseSince(raw: string | undefined): number {
   return Number.isInteger(since) && since > 0 ? since : 0;
 }
 
-function undeliveredCount(state: PlanState): number {
-  return pendingMessages(state).filter((m) => m.deliveredAt === undefined).length;
+function waitingQuestions(state: PlanState): number {
+  return pendingMessages(state).filter((m) => m.kind === 'ask' && m.deliveredAt === undefined).length;
 }
 
 function replayFrames(state: PlanState, since: number, render: typeof renderBlock): SseFrame[] {
@@ -225,7 +225,7 @@ export function createApp(deps: AppDeps): PinpointApp {
     const state = store.get(planId);
     return {
       event: 'presence',
-      data: { presence: presence(planId), undelivered: state === undefined ? 0 : undeliveredCount(state) },
+      data: { presence: presence(planId), undelivered: state === undefined ? 0 : waitingQuestions(state) },
     };
   };
   const planUrl = (id: string) => `${baseUrl}/plans/${id}`;
@@ -381,7 +381,7 @@ export function createApp(deps: AppDeps): PinpointApp {
     if (state === undefined) {
       return c.html('<!doctype html><title>Not found</title><p>No plan with that id.</p>', 404);
     }
-    return c.html(renderPage(state, assets, { presence: presence(id), undelivered: undeliveredCount(state), baseUrl }));
+    return c.html(renderPage(state, assets, { presence: presence(id), undelivered: waitingQuestions(state), baseUrl }));
   });
 
   app.get('/fonts/:file', (c) => {

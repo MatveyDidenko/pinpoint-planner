@@ -35,7 +35,7 @@ test('Tab to a block, Enter, type, Enter sends without a mouse', async ({ page, 
   const body = (await posted).postDataJSON();
 
   expect(body).toMatchObject({ kind: 'ask', blockId, text: 'why this one?' });
-  await expect(block.locator('[data-state="asked"]')).toContainText('Asked');
+  await expect(block.locator('[data-state="asked"]')).toContainText('Waiting for the agent');
 });
 
 test('Enter on a focused choose button chooses instead of opening the composer', async ({ page, request }) => {

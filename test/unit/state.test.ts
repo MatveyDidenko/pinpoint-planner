@@ -69,7 +69,7 @@ describe('openPlan', () => {
       'Way A · Refresh inside the fetch wrapper',
       'Way B · Proactive refresh timer',
       'Way C · Refresh at each call site',
-      'The pick',
+      'Recommended',
     ]);
     expect(blocks.map((b) => b.label)).toEqual(blocks.map(blockLabel));
     expect(blocks.every((b) => b.rev === 1 && b.touchedAt === 1 && b.qa.length === 0)).toBe(true);
@@ -259,6 +259,7 @@ describe('postMessage ask', () => {
 
     expect(error).toBeInstanceOf(StateError);
     expect((error as StateError).code).toBe('BLOCK_FULL');
+    expect((error as StateError).message).toBe('This card holds 40 questions, the most it can take.');
     expect(state.messages).toHaveLength(MAX_EXCHANGES);
   });
 
@@ -733,7 +734,7 @@ describe('patchBlock', () => {
     expect(result.touched).toEqual(['opt-a', 'verdict']);
     expect(verdict.why).toBe('One choke point.');
     expect(verdict.optionName).toBe('Refresh in the wrapper');
-    expect(verdict.label).toBe('The pick');
+    expect(verdict.label).toBe('Recommended');
     expect(verdict.optionId).toBe('opt-a');
     expect(verdict.letter).toBe('A');
     expect(verdict.qa).toEqual(before.qa);

@@ -1,4 +1,4 @@
-import { optionTabRule } from '../../shared/frames';
+import { optionTabName, optionTabRule } from '../../shared/frames';
 import { type Presence, presenceLabel } from '../presence';
 import type { Block, OptionBlock, PlanState, PlanSummary } from '../types';
 import { renderBlock } from './blocks';
@@ -24,31 +24,36 @@ function header(s: PlanState, presence: Presence, undelivered: number): string {
     `<div class="plan-header__text"><div class="eyebrow">PINPOINT</div>` +
     `<h1 class="plan-title">${esc(s.plan.title)}</h1><p class="plan-task">${esc(s.plan.task)}</p></div>` +
     `<div class="plan-header__actions">` +
-    `<span class="presence" data-testid="presence" data-state="${attr(presence)}"><span class="dot"></span>` +
+    `<span class="presence" data-testid="presence" data-state="${attr(presence)}" tabindex="-1"><span class="dot"></span>` +
     `<span class="presence-label">${esc(presenceLabel(presence, undelivered))}</span></span>` +
-    `<button type="button" class="done-btn" data-action="done" data-testid="done"${handedBack ? ' disabled' : ''}>Done reviewing</button>` +
-    `<button type="button" class="theme-toggle" data-testid="theme-toggle" aria-label="Toggle theme">Theme</button>` +
+    `<button type="button" class="hand-back-btn" data-action="hand-back" data-testid="done"${handedBack ? ' disabled' : ''}>Hand back to agent</button>` +
+    `<span class="hand-back-confirm" data-testid="done-confirm" hidden>Hand back now?` +
+    `<button type="button" class="done-btn" data-action="done" data-testid="done-yes">Hand back</button>` +
+    `<button type="button" class="hand-back-btn" data-action="keep-reviewing" data-testid="done-no">Keep reviewing</button></span>` +
+    `<button type="button" class="theme-toggle" data-testid="theme-toggle" aria-label="Switch to dark theme">Dark</button>` +
     `</div></header>`
   );
 }
 
-function stage(n: string, title: string, inner: string, hidden = false): string {
+function stage(n: string, title: string, inner: string, hidden = false, hint = ''): string {
   return (
     `<section class="stage" data-stage="${n}" data-testid="stage-${n}"${hidden ? ' hidden' : ''}>` +
-    `<h2 class="stage-eyebrow eyebrow">${esc(`${n} · ${title}`)}</h2>${inner}</section>`
+    `<h2 class="stage-eyebrow eyebrow">${esc(`${n} · ${title}`)}</h2>` +
+    `${hint === '' ? '' : `<p class="stage-hint">${esc(hint)}</p>`}${inner}</section>`
   );
 }
 
 function optionTab(option: OptionBlock, shown: OptionBlock): string {
   const id = attr(option.id);
-  const label = `${option.letter} · ${option.name}`;
   const selected = option === shown;
-  const name = option.recommended ? ` aria-label="${attr(`${label} · recommended`)}"` : '';
+  const chosen = option.steps.state !== 'none';
+  const name = optionTabName({ label: option.label, recommended: option.recommended, chosen, dot: null });
   const star = option.recommended ? '<span class="option-tab__star" aria-hidden="true">★</span>' : '';
   return (
     `<button type="button" role="tab" class="option-tab" id="tab-${id}" data-option="${id}" data-testid="tab-${id}" aria-controls="block-${id}"` +
-    ` aria-selected="${selected}" tabindex="${selected ? 0 : -1}" title="${attr(label)}"${name}>` +
-    `<span class="option-tab__label">${esc(label)}</span>${star}</button>`
+    ` aria-selected="${selected}" tabindex="${selected ? 0 : -1}" title="${attr(option.label)}" aria-label="${attr(name)}">` +
+    `<span class="option-tab__dot" aria-hidden="true"></span><span class="option-tab__label">${esc(option.label)}</span>${star}` +
+    `<span class="option-tab__chosen" aria-hidden="true"${chosen ? '' : ' hidden'}>Chosen</span></button>`
   );
 }
 
@@ -77,14 +82,15 @@ export function renderPage(
   const options = ofKind('option');
   const context = ofKind('context');
 
-  const sections: { title: string; inner: string; hidden?: boolean }[] = [
+  const sections: { title: string; inner: string; hidden?: boolean; hint?: string }[] = [
     ...(context.length > 0 ? [{ title: 'How it works today', inner: renderAll(context, s.plan.id) }] : []),
     { title: "What's already here", inner: renderAll(ofKind('findings'), s.plan.id) },
     {
       title: WAYS_TITLE[options.length] ?? `${options.length} ways`,
       inner: `${optionTabs(options)}<div class="options">${renderAll(options, s.plan.id)}</div>`,
+      hint: 'Click any card, or select text in it, to ask about it.',
     },
-    { title: 'The pick', inner: renderAll(ofKind('verdict'), s.plan.id) },
+    { title: 'Recommended', inner: renderAll(ofKind('verdict'), s.plan.id) },
     {
       title: 'Steps',
       inner: `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'), s.plan.id)}</div>`,
@@ -92,12 +98,14 @@ export function renderPage(
     },
   ];
   const stages = sections
-    .map((section, i) => stage(String(i + 1).padStart(2, '0'), section.title, section.inner, section.hidden))
+    .map((section, i) =>
+      stage(String(i + 1).padStart(2, '0'), section.title, section.inner, section.hidden, section.hint),
+    )
     .join('');
 
   const body =
     `${header(s, opts.presence, opts.undelivered)}<main class="page" data-testid="page">${stages}` +
-    `<div id="composer" data-testid="composer" hidden></div><div id="toast" data-testid="toast" hidden></div></main>`;
+    `<div id="composer" data-testid="composer" hidden></div><div id="toast" data-testid="toast" role="status" hidden></div></main>`;
 
   const boot = jsonScript({ planId: s.plan.id, revision: s.revision, presence: opts.presence, review: s.review });
   const scripts = `<script type="application/json" id="pinpoint-boot">${boot}</script><script>${assets.js}</script>`;

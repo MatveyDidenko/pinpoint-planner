@@ -1,5 +1,6 @@
 import type { Boot } from '../shared/frames';
 import { initComposer } from './composer';
+import { initConversations } from './conversation';
 import { closeEditor, initDiagramEditor } from './diagram-editor';
 import { connectLive } from './live';
 import { postMessage } from './messages';
@@ -24,10 +25,19 @@ function lockBlockButtons(root: ParentNode | null): void {
   }
 }
 
+function askToHandBack(asking: boolean): void {
+  const start = document.querySelector<HTMLButtonElement>('[data-action="hand-back"]');
+  const confirm = document.querySelector<HTMLElement>('[data-testid="done-confirm"]');
+  if (start === null || confirm === null) return;
+  start.hidden = asking;
+  confirm.hidden = !asking;
+}
+
 function setHandedBack(): void {
   handedBack = true;
   const done = document.querySelector<HTMLButtonElement>('[data-testid="done"]');
   if (done) done.disabled = true;
+  askToHandBack(false);
   closeEditor(false);
   lockBlockButtons(document);
   lockSelection();
@@ -38,12 +48,26 @@ function setHandedBack(): void {
 function initDone(planId: string): void {
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
+    if (event.target.closest('[data-action="hand-back"]:enabled')) {
+      askToHandBack(true);
+      document.querySelector<HTMLButtonElement>('[data-action="keep-reviewing"]')?.focus();
+    }
+    if (event.target.closest('[data-action="keep-reviewing"]')) {
+      askToHandBack(false);
+      document.querySelector<HTMLButtonElement>('[data-action="hand-back"]')?.focus();
+    }
     const button = event.target.closest<HTMLButtonElement>('[data-action="done"]');
     if (button === null || button.disabled) return;
     button.disabled = true;
-    postMessage(planId, { clientId: crypto.randomUUID(), kind: 'done', text: '' }).then(setHandedBack, () => {
-      button.disabled = false;
-    });
+    postMessage(planId, { clientId: crypto.randomUUID(), kind: 'done', text: '' }).then(
+      () => {
+        setHandedBack();
+        document.querySelector<HTMLElement>('[data-testid="presence"]')?.focus();
+      },
+      () => {
+        button.disabled = false;
+      },
+    );
   });
 }
 
@@ -54,6 +78,7 @@ if (bootText) {
   initTabs();
   initChoose(boot.planId);
   initComposer(boot.planId);
+  initConversations(boot.planId);
   initDiagramEditor(boot.planId);
   initDone(boot.planId);
   if (boot.review === 'handed-back') setHandedBack();

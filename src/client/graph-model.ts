@@ -59,10 +59,19 @@ function updateNode(g: EditGraph, id: string, change: (node: EditNode) => EditNo
   return { ...g, nodes: g.nodes.map((node) => (node.id === id ? change(node) : node)) };
 }
 
+/** Relabels a box and pushes every box right of it along by however much it grew, so it never covers a neighbour. */
 export function renameNode(g: EditGraph, id: string, label: string): EditGraph {
   const trimmed = label.trim();
-  if (trimmed === '' || trimmed.length > LABEL_LIMIT) return g;
-  return updateNode(g, id, (node) => ({ ...node, label: trimmed, w: measureLabel(trimmed) }));
+  const renamed = g.nodes.find((node) => node.id === id);
+  if (trimmed === '' || trimmed.length > LABEL_LIMIT || renamed === undefined) return g;
+  const w = measureLabel(trimmed);
+  const right = renamed.x + renamed.w;
+  const grow = Math.max(0, w - renamed.w);
+  const nodes = g.nodes.map((node) => {
+    if (node.id === id) return { ...node, label: trimmed, w };
+    return grow > 0 && node.x >= right ? { ...node, x: round1(node.x + grow) } : node;
+  });
+  return { ...g, nodes };
 }
 
 export function cycleStatus(g: EditGraph, id: string): EditGraph {

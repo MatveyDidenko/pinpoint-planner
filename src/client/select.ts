@@ -9,8 +9,7 @@ const BLOCK_SELECTOR = '[data-block]';
 const SELECTED_SELECTOR = '[data-block][data-selected]';
 
 export function isActionTarget(el: Element): boolean {
-  const control = el.closest('[data-action], a, button, textarea, input');
-  return control !== null && !control.matches('[data-action="ask"]');
+  return el.closest('[data-action], a, button, textarea, input, summary, #composer') !== null;
 }
 
 let selectionLocked = false;
@@ -44,11 +43,6 @@ export function clearSelection(): void {
   announce({ blockId: null });
 }
 
-function composerHasDraft(): boolean {
-  const input = document.querySelector<HTMLTextAreaElement>('#composer textarea');
-  return input !== null && input.value !== '';
-}
-
 function isBlockEnter(event: KeyboardEvent): event is KeyboardEvent & { target: HTMLElement } {
   const { target } = event;
   const plain = !(event.shiftKey || event.ctrlKey || event.altKey || event.metaKey);
@@ -78,7 +72,7 @@ export function initSelect(): void {
     }
     if (event.key !== 'Escape' || event.defaultPrevented) return;
     if (event.target instanceof Element && event.target.closest('#composer')) return;
-    if (!composerHasDraft()) clearSelection();
+    clearSelection();
   });
 }
 
@@ -86,6 +80,7 @@ function showChooseError(button: HTMLButtonElement, text: string): void {
   const note = document.createElement('span');
   note.className = 'choose-note';
   note.setAttribute('role', 'alert');
+  note.setAttribute('data-error', '');
   note.setAttribute('data-testid', `${button.getAttribute('data-testid') ?? 'choose'}-error`);
   note.textContent = text;
   button.after(note);

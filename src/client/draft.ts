@@ -72,3 +72,13 @@ export function saveDiagram(planId: string, blockId: string, base: EditGraph, gr
 export function clearDiagram(planId: string, blockId: string): void {
   removeStored(storageKey('diagram', planId, blockId));
 }
+
+export function loadConversationHidden(planId: string, blockId: string): boolean {
+  return readStored(storageKey('conversation', planId, blockId)) === 'hidden';
+}
+
+export function saveConversationHidden(planId: string, blockId: string, hidden: boolean): void {
+  const key = storageKey('conversation', planId, blockId);
+  if (hidden) writeStored(key, 'hidden');
+  else removeStored(key);
+}

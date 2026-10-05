@@ -45,7 +45,7 @@ test('the chip shows a waiting count when a question is queued and no agent is o
 
   const chip = page.getByTestId('presence');
   await expect(chip).toHaveAttribute('data-state', 'waiting');
-  await expect(chip.locator('.presence-label')).toHaveText('Agent not on the line · 1 waiting');
+  await expect(chip.locator('.presence-label')).toHaveText('Agent not on the line · 1 question waiting');
 });
 
 test('Done hands back: chip shows handed back and the composer cannot open', async ({ page, request }) => {
@@ -57,6 +57,8 @@ test('Done hands back: chip shows handed back and the composer cannot open', asy
     (req) => req.method() === 'POST' && req.url().endsWith(`/api/plans/${id}/messages`),
   );
   await page.getByTestId('done').click();
+  await expect(page.getByTestId('done-confirm')).toContainText('Hand back now?');
+  await page.getByTestId('done-yes').click();
   expect((await posted).postDataJSON()).toMatchObject({ kind: 'done', text: '' });
 
   const chip = page.getByTestId('presence');
@@ -85,9 +87,10 @@ test('a poll after Done returns status done listing the unanswered question', as
   await page.locator('[data-block="opt-b"] .option-name').click();
   await page.getByTestId('composer-input').fill('why the timer?');
   await page.getByTestId('composer-input').press('Enter');
-  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Asked');
+  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Waiting for the agent');
 
   await page.getByTestId('done').click();
+  await page.getByTestId('done-yes').click();
   await expect(page.getByTestId('presence')).toHaveAttribute('data-state', 'handed-back');
 
   const poll = await request.get(`/api/plans/${id}/poll?timeoutMs=0`);

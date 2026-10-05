@@ -7,7 +7,7 @@ const planId = () => `choose-${Date.now()}`;
 const stepsFixture = (name: string): unknown =>
   JSON.parse(readFileSync(new URL(`../fixtures/steps.${name}.json`, import.meta.url), 'utf8'));
 
-test('choose A shows Steps requested, steps posted through the api appear in stage 05, choose C lands beside them', async ({
+test('choose A shows Chosen, steps posted through the api appear in stage 05, choose C lands beside them', async ({
   page,
   request,
 }) => {
@@ -18,7 +18,7 @@ test('choose A shows Steps requested, steps posted through the api appear in sta
   await expect(page.getByTestId('stage-05')).toBeHidden();
 
   await page.getByTestId('choose-opt-a').click();
-  await expect(page.locator('[data-block="opt-a"]')).toContainText('Steps requested');
+  await expect(page.locator('[data-block="opt-a"]')).toContainText('Chosen · waiting for steps');
   await expect(page.getByTestId('choose-opt-a')).toBeDisabled();
 
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-a') });
@@ -29,7 +29,7 @@ test('choose A shows Steps requested, steps posted through the api appear in sta
 
   await showOption(page, 'opt-c');
   await page.getByTestId('choose-opt-c').click();
-  await expect(page.locator('[data-block="opt-c"]')).toContainText('Steps requested');
+  await expect(page.locator('[data-block="opt-c"]')).toContainText('Chosen · waiting for steps');
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-c') });
   await expect(page.locator('[data-kind=steps]')).toHaveCount(2);
 
@@ -40,7 +40,7 @@ test('choose A shows Steps requested, steps posted through the api appear in sta
   expect(Math.abs(second.y - first.y)).toBeLessThan(20);
 });
 
-test('after steps are ready the card shows a Steps ready link and no choose button', async ({ page, request }) => {
+test('after steps are ready the card shows a See steps link and no choose button', async ({ page, request }) => {
   const id = planId();
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
@@ -49,9 +49,9 @@ test('after steps are ready the card shows a Steps ready link and no choose butt
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-a') });
 
   const card = page.locator('[data-block="opt-a"]');
-  await expect(card.getByTestId('steps-link-opt-a')).toContainText('Steps ready');
+  await expect(card.getByTestId('steps-link-opt-a')).toContainText('See steps');
   await expect(card.getByTestId('choose-opt-a')).toHaveCount(0);
-  await expect(card).not.toContainText('Steps requested');
+  await expect(card).not.toContainText('waiting for steps');
 });
 
 test('reload keeps both steps blocks and both card states', async ({ page, request }) => {

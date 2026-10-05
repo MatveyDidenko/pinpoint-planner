@@ -45,5 +45,5 @@ test('the composer still works when sessionStorage throws', async ({ page, reque
   await page.getByTestId('composer-input').press('Enter');
 
   expect((await posted).postDataJSON()).toMatchObject({ kind: 'ask', blockId: 'opt-b', text: 'still works?' });
-  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Asked');
+  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Waiting for the agent');
 });

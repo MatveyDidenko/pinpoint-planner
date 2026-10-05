@@ -1,6 +1,6 @@
 import { attr, esc } from '../render/esc';
 import type { Graph, Status } from '../schema';
-import { ARC_H, type GraphLayout, layoutGraph, NODE_H, round1 } from './layout';
+import { ARC_H, EDGE_LABEL_INSET, type GraphLayout, layoutGraph, NODE_H, round1 } from './layout';
 
 export const STATUS_ORDER: readonly Status[] = ['reused', 'new', 'changed', 'external'];
 
@@ -24,15 +24,20 @@ function renderNode(node: GraphLayout['nodes'][number], focusable: boolean): str
   );
 }
 
-function edgeLabelPoint(layout: GraphLayout, edge: GraphLayout['edges'][number]): { x: number; y: number } | null {
+type LabelPoint = { x: number; y: number; anchor: 'middle' | 'end' };
+
+// A forward label sits before the arrowhead on the far side of the arrival line, clear of its own curve.
+function edgeLabelPoint(layout: GraphLayout, edge: GraphLayout['edges'][number]): LabelPoint | null {
   const from = layout.nodes.find((n) => n.id === edge.from);
   const to = layout.nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
   if (edge.back) {
     const ceiling = Math.min(from.y, to.y) - ARC_H;
-    return { x: round1((from.x + from.w / 2 + to.x + to.w / 2) / 2), y: round1((from.y + to.y + 6 * ceiling) / 8 - 4) };
+    const x = round1((from.x + from.w / 2 + to.x + to.w / 2) / 2);
+    return { x, y: round1((from.y + to.y + 6 * ceiling) / 8 - 4), anchor: 'middle' };
   }
-  return { x: round1((from.x + from.w + to.x) / 2), y: round1((from.y + to.y) / 2 + NODE_H / 2 - 6) };
+  const arrival = to.y + NODE_H / 2;
+  return { x: round1(to.x - EDGE_LABEL_INSET), y: round1(to.y > from.y ? arrival + 14 : arrival - 6), anchor: 'end' };
 }
 
 function renderEdge(layout: GraphLayout, edge: GraphLayout['edges'][number], markerId: string): string {
@@ -44,7 +49,7 @@ function renderEdge(layout: GraphLayout, edge: GraphLayout['edges'][number], mar
     `d="${attr(edge.path)}" marker-end="url(#${attr(markerId)})"/>`;
   const point = edge.label === undefined ? null : edgeLabelPoint(layout, edge);
   if (edge.label === undefined || point === null) return path;
-  return `${path}<text class="edge-label" x="${point.x}" y="${point.y}" text-anchor="middle">${esc(edge.label)}</text>`;
+  return `${path}<text class="edge-label" x="${point.x}" y="${point.y}" text-anchor="${point.anchor}">${esc(edge.label)}</text>`;
 }
 
 export function renderLayoutSvg(

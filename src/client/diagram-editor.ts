@@ -41,15 +41,15 @@ type Editor = {
 const TOOLBAR =
   `<div class="editor-toolbar" role="toolbar" aria-label="Diagram editor">` +
   `<button type="button" data-testid="add-box">Add box</button>` +
-  `<button type="button" data-testid="status-selected" disabled>Status</button>` +
+  `<button type="button" data-testid="status-selected" disabled>Change status</button>` +
   `<button type="button" data-testid="delete-selected" disabled>Delete</button>` +
-  `<button type="button" data-testid="reset-diagram">Reset</button>` +
   `<button type="button" data-testid="draw" aria-pressed="false">Draw</button>` +
-  `<button type="button" data-testid="undo-stroke" aria-label="Undo last stroke" disabled>Undo</button>` +
-  `<button type="button" data-testid="clear-strokes" aria-label="Clear drawing" disabled>Clear</button>` +
-  `<span class="editor-note" data-testid="editor-note" aria-live="polite"></span>` +
+  `<button type="button" data-testid="undo-stroke" disabled>Undo stroke</button>` +
+  `<button type="button" data-testid="clear-strokes" disabled>Clear drawing</button>` +
   `<button type="button" class="editor-ask" data-action="ask-version" data-testid="ask-version">Ask about my version</button>` +
+  `<button type="button" data-testid="reset-diagram">Reset to agent's version</button>` +
   `<button type="button" data-testid="done-editing">Done editing</button>` +
+  `<span class="editor-note" data-testid="editor-note" aria-live="polite"></span>` +
   `</div>`;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -74,6 +74,7 @@ const INLINED_STYLES = [
   'font-size',
   'font-weight',
 ];
+const SHORTCUTS = 'Enter rename · S status · C connect · Delete remove · arrows move';
 const ARROW_STEPS: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
@@ -222,12 +223,16 @@ function sync(editor: Editor): void {
   }
   const note = editor.root.querySelector('[data-testid="editor-note"]');
   if (note === null) return;
+  const boxFocused =
+    editor.canvas.contains(document.activeElement) && selectionOf(document.activeElement)?.kind === 'node';
   if (editor.connectFrom !== null) {
-    note.textContent = `Connecting from ${labelOf(editor, editor.connectFrom)}: focus a box and press Enter, or Esc to cancel`;
+    note.textContent = `Connecting from ${labelOf(editor, editor.connectFrom)}: click a box, or focus one and press Enter. Esc cancels`;
   } else if (editor.drawing && editor.strokes.length >= STROKE_LIMIT) {
     note.textContent = `Drawings hold at most ${STROKE_LIMIT} strokes`;
+  } else if (editor.graph.edges.length >= EDGE_LIMIT) {
+    note.textContent = `Diagrams hold at most ${EDGE_LIMIT} arrows`;
   } else {
-    note.textContent = editor.graph.edges.length >= EDGE_LIMIT ? `Diagrams hold at most ${EDGE_LIMIT} arrows` : '';
+    note.textContent = boxFocused && !editor.drawing ? SHORTCUTS : '';
   }
 }
 
@@ -342,7 +347,8 @@ function startConnect(editor: Editor, event: PointerEvent, from: string): void {
     document.removeEventListener('pointercancel', finish);
     line.remove();
     const to = e.type === 'pointerup' ? nodeIdOf(document.elementFromPoint(e.clientX, e.clientY)) : null;
-    if (to !== null) commit(editor, connect(editor.graph, from, to));
+    if (to === from) setConnectFrom(editor, from);
+    else if (to !== null) commit(editor, connect(editor.graph, from, to));
   };
   document.addEventListener('pointermove', follow);
   document.addEventListener('pointerup', finish);
@@ -528,7 +534,9 @@ function open(figure: Element, kept?: Editor): void {
   root.addEventListener('focusin', (event) => {
     editor.focused = selectionOf(event.target);
     if (editor.focused !== null) select(editor, editor.focused);
+    else sync(editor);
   });
+  root.addEventListener('focusout', () => sync(editor));
   canvas.addEventListener('mousedown', (event) => {
     const id = event.target instanceof Element ? event.target.getAttribute('data-hit-node') : null;
     if (id === null) return;
@@ -541,10 +549,18 @@ function open(figure: Element, kept?: Editor): void {
       return;
     }
     if (event.target === canvas || event.target instanceof SVGSVGElement) select(editor, null);
+    if (editor.connectFrom !== null && nodeIdOf(event.target) !== null) return;
     const from =
       event.target instanceof Element ? event.target.closest('[data-handle]')?.getAttribute('data-handle') : null;
     if (from) startConnect(editor, event, from);
     else startDrag(editor, event);
+  });
+  canvas.addEventListener('click', (event) => {
+    const to = nodeIdOf(event.target);
+    if (editor.connectFrom === null || to === null || to === editor.connectFrom) return;
+    commit(editor, connect(editor.graph, editor.connectFrom, to));
+    setConnectFrom(editor, null);
+    nodeEl(editor, to)?.focus();
   });
   canvas.addEventListener('dblclick', (event) => {
     const id = nodeIdOf(event.target);

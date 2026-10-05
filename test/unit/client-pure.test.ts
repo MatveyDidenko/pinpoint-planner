@@ -41,18 +41,17 @@ describe('composerKeyAction', () => {
   const key = (name: string, shiftKey = false, isComposing = false) => ({ key: name, shiftKey, isComposing });
 
   it('composerKeyAction table', () => {
-    const rows: [ReturnType<typeof key>, boolean, ReturnType<typeof composerKeyAction>][] = [
-      [key('Enter'), false, 'send'],
-      [key('Enter', true), false, 'newline'],
-      [key('Escape'), true, 'close'],
-      [key('Escape'), false, 'none'],
-      [key('Enter', false, true), false, 'none'],
-      [key('Escape', false, true), true, 'none'],
-      [key('a'), true, 'none'],
+    const rows: [ReturnType<typeof key>, ReturnType<typeof composerKeyAction>][] = [
+      [key('Enter'), 'send'],
+      [key('Enter', true), 'newline'],
+      [key('Escape'), 'close'],
+      [key('Enter', false, true), 'none'],
+      [key('Escape', false, true), 'none'],
+      [key('a'), 'none'],
     ];
 
-    for (const [event, textEmpty, expected] of rows) {
-      expect(composerKeyAction(event, textEmpty)).toBe(expected);
+    for (const [event, expected] of rows) {
+      expect(composerKeyAction(event)).toBe(expected);
     }
   });
 });

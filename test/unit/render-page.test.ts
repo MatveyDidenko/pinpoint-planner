@@ -47,11 +47,13 @@ describe('renderPage', () => {
     expect(html).toContain(assets.js);
 
     expect(html).toContain('data-testid="presence" data-state="waiting"');
-    expect(html).toContain('Agent not on the line · 2 waiting');
-    expect(html).toContain('data-action="done" data-testid="done"');
+    expect(html).toContain('Agent not on the line · 2 questions waiting');
+    expect(html).toContain('data-action="hand-back" data-testid="done"');
+    expect(html).toContain('data-action="done" data-testid="done-yes"');
     expect(html).toContain('data-testid="theme-toggle"');
     expect(html).toContain('id="composer"');
-    expect(html).toContain('id="toast"');
+    expect(html).toContain('id="toast" data-testid="toast" role="status"');
+    expect(html).toContain('<p class="stage-hint">Click any card, or select text in it, to ask about it.</p>');
 
     for (const n of ['01', '02', '03', '04', '05']) {
       expect(html).toContain(`data-stage="${n}" data-testid="stage-${n}"`);
@@ -59,7 +61,7 @@ describe('renderPage', () => {
     expect(html).toContain('01 · How it works today');
     expect(html).toContain('02 · What&#39;s already here');
     expect(html).toContain('03 · Three ways');
-    expect(html).toContain('04 · The pick');
+    expect(html).toContain('04 · Recommended');
     expect(html).toContain('05 · Steps');
 
     const order = state.plan.blocks.map((b) => html.indexOf(`data-block="${b.id}"`));
@@ -82,7 +84,7 @@ describe('renderPage', () => {
     expect(html).toContain('01 · How it works today');
     expect(html).toContain('02 · What&#39;s already here');
     expect(html).toContain('03 · Three ways');
-    expect(html).toContain('04 · The pick');
+    expect(html).toContain('04 · Recommended');
     expect(html).toContain('05 · Steps');
     expect(html.indexOf('data-stage="01"')).toBeLessThan(html.indexOf('data-block="context"'));
     expect(html.indexOf('data-block="context"')).toBeLessThan(html.indexOf('data-stage="02"'));
@@ -116,9 +118,10 @@ describe('renderPage', () => {
       expect(html).toContain(`id="block-${id}" role="tabpanel" aria-labelledby="tab-${id}"`);
       expect(tabs[i]).toContain(i === 0 ? 'aria-selected="true" tabindex="0"' : 'aria-selected="false" tabindex="-1"');
     }
-    expect(tabs[0]).toContain('title="A · Refresh inside the fetch wrapper"');
+    expect(tabs[0]).toContain('title="Way A · Refresh inside the fetch wrapper"');
+    expect(tabs[0]).toContain('aria-label="Way A · Refresh inside the fetch wrapper, recommended"');
     expect(tabs[0]).toContain('★');
-    expect(tabs[1]).toContain('>B · Proactive refresh timer<');
+    expect(tabs[1]).toContain('>Way B · Proactive refresh timer<');
     expect(tabs.slice(1).some((tab) => tab.includes('★'))).toBe(false);
 
     const state = loadState();
@@ -134,12 +137,12 @@ describe('renderPage', () => {
   it('a tab label with markup is escaped', () => {
     const state = loadState();
     const optA = state.plan.blocks.find((block) => block.id === 'opt-a');
-    if (optA?.kind === 'option') optA.name = '<b>"x"</b>';
+    if (optA?.kind === 'option') optA.label = 'Way A · <b>"x"</b>';
     const tab = tabsOf(renderPage(state, assets, opts))[0] ?? '';
 
     expect(tab).not.toContain('<b>');
-    expect(tab).toContain('title="A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;"');
-    expect(tab).toContain('>A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;<');
+    expect(tab).toContain('title="Way A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;"');
+    expect(tab).toContain('>Way A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;<');
   });
 
   it('the steps stage is hidden until a steps block exists', () => {

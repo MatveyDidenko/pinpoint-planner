@@ -24,7 +24,7 @@ test('no request leaves 127.0.0.1', async ({ page, request }) => {
   await page.locator('[data-block="opt-b"] .option-name').click();
   await page.getByTestId('composer-input').fill('why the timer?');
   await page.getByTestId('composer-input').press('Enter');
-  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Asked');
+  await expect(page.locator('[data-block="opt-b"] [data-state="asked"]')).toContainText('Waiting for the agent');
 
   expect(urls.length).toBeGreaterThan(0);
   expect(urls.filter((url) => !isLocal(url))).toEqual([]);

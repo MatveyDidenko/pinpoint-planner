@@ -3,36 +3,62 @@ import { renderMarkdown } from '../markdown';
 import type { Block, ContextBlock, Exchange, FindingsBlock, OptionBlock, StepsBlock, VerdictBlock } from '../types';
 import { attr, esc } from './esc';
 
-const EFFORT_PIPS = { S: 1, M: 2, L: 3 } as const;
 const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
 const RISK_WORDS = { low: 'Low', medium: 'Medium', high: 'High' } as const;
-const MAX_PIPS = 3;
+
+const OPEN_THREADS = 2;
+
+function isBusy(b: Block): boolean {
+  return b.qa.some((x) => x.state !== 'answered') || (b.kind === 'option' && b.steps.state === 'requested');
+}
+
+function conversationToggle(b: Block): string {
+  if (b.qa.length === 0) return '';
+  return (
+    `<button type="button" class="qa-toggle" data-action="toggle-qa" data-count="${b.qa.length}" aria-expanded="true" ` +
+    `data-testid="qa-toggle-${attr(b.id)}">Hide conversation (${b.qa.length})</button>`
+  );
+}
 
 function blockShell(b: Block, planId: string, inner: string, modifiers = '', attrs = ''): string {
+  const busy = isBusy(b);
+  const way = b.kind === 'option' || b.kind === 'steps' ? ` data-way="${b.letter}"` : '';
+  const indicator = busy
+    ? `<p class="busy" data-testid="busy-${attr(b.id)}"><span class="busy-spinner" aria-hidden="true"></span>The agent is working…</p>`
+    : '';
   return (
     `<section class="block block--${b.kind}${modifiers}" id="block-${attr(b.id)}"${attrs} data-block="${attr(b.id)}" ` +
-    `data-kind="${b.kind}" data-rev="${b.rev}" data-label="${attr(b.label)}" tabindex="0" ` +
+    `data-kind="${b.kind}" data-rev="${b.rev}" data-label="${attr(b.label)}"${way}${busy ? ' data-busy=""' : ''} tabindex="0" ` +
     `data-testid="block-${attr(b.id)}">` +
-    `<button type="button" class="ask-btn" data-action="ask" data-testid="ask-${attr(b.id)}">Ask</button>` +
-    `${inner}` +
+    `${indicator}${inner}${conversationToggle(b)}` +
     `<div class="qa" data-testid="qa-${attr(b.id)}">${renderThreads(b, planId)}</div>` +
     `</section>`
   );
 }
 
 function renderThreads(b: Block, planId: string): string {
-  return Array.from(
-    Map.groupBy(b.qa, (x) => x.threadId),
-    ([threadId, exchanges]) => {
+  const threads = Array.from(Map.groupBy(b.qa, (x) => x.threadId));
+  return threads
+    .map(([threadId, exchanges], at) => {
       const t = attr(threadId);
       const inner = exchanges.map((x, i) => renderExchange(x, planId, b.id, i > 0)).join('');
-      const reply =
-        exchanges.at(-1)?.state === 'answered'
-          ? `<button type="button" class="reply-btn" data-action="reply" data-thread="${t}" data-testid="reply-${t}">Reply</button>`
-          : '';
-      return `<div class="thread" data-thread="${t}" data-testid="thread-${t}">${inner}${reply}</div>`;
-    },
-  ).join('');
+      const answered = exchanges.at(-1)?.state === 'answered';
+      const reply = answered
+        ? `<button type="button" class="reply-btn" data-action="reply" data-thread="${t}" data-testid="reply-${t}">Reply</button>`
+        : '';
+      if (!answered || at >= threads.length - OPEN_THREADS) {
+        return `<div class="thread" data-thread="${t}" data-testid="thread-${t}">${inner}${reply}</div>`;
+      }
+      const question = esc(exchanges[0]?.question ?? '');
+      return (
+        `<details class="thread thread--old" data-thread="${t}" data-testid="thread-${t}">` +
+        `<summary class="thread-summary" data-testid="thread-toggle-${t}">` +
+        `<span class="asked-line">You asked: ${question}</span>` +
+        `<span class="thread-more"><span class="thread-more--show">Show answer</span><span class="thread-more--hide">Hide answer</span></span>` +
+        `</summary>${inner}${reply}</details>`
+      );
+    })
+    .join('');
 }
 
 export function renderExchange(x: Exchange, planId: string, blockId: string, followup = false): string {
@@ -50,7 +76,7 @@ export function renderExchange(x: Exchange, planId: string, blockId: string, fol
   const sketch = x.sketch
     ? `<img class="sketch" alt="Your drawing" src="/api/plans/${attr(planId)}/sketches/${attr(x.id)}.png" data-testid="sketch-${attr(x.id)}">`
     : '';
-  const question = esc(x.question);
+  const asked = `${open}<p class="asked-line">You asked: ${esc(x.question)}</p>${excerpt}${proposal}${sketch}`;
 
   if (x.state === 'answered' && x.answer !== undefined) {
     const diagram =
@@ -60,26 +86,16 @@ export function renderExchange(x: Exchange, planId: string, blockId: string, fol
             markerId: `mk-${blockId}-${x.id}`,
             ariaLabel: 'Answer diagram',
           })}</figure>`;
-    return (
-      `${open}${excerpt}${proposal}${sketch}<p class="asked-line">You asked: ${question}</p>` +
-      `<div class="answer">${renderMarkdown(x.answer.md)}</div>${diagram}</div>`
-    );
+    return `${asked}<div class="answer">${renderMarkdown(x.answer.md)}</div>${diagram}</div>`;
   }
 
-  const status = x.state === 'delivered' ? 'Delivered to the agent' : 'Asked';
-  return `${open}${excerpt}${proposal}${sketch}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
+  const status = x.state === 'delivered' ? 'The agent is reading' : 'Waiting for the agent';
+  return `${asked}<p class="exchange-status">${status}</p></div>`;
 }
 
 function renderCost({ id, cost }: OptionBlock): string {
-  const filled = EFFORT_PIPS[cost.effort];
-  const pips = Array.from(
-    { length: MAX_PIPS },
-    (_, i) => `<span class="pip${i < filled ? ' pip--on' : ''}"></span>`,
-  ).join('');
   return (
     `<div class="cost">` +
-    `<span class="effort" aria-hidden="true">${pips}</span>` +
-    `<span class="pip pip--risk" data-risk="${cost.risk}" aria-hidden="true"></span>` +
     `<span class="cost-label" data-testid="cost-${attr(id)}">${EFFORT_WORDS[cost.effort]} effort · ${RISK_WORDS[cost.risk]} risk</span>` +
     `<span class="cost-note">${esc(cost.note)}</span>` +
     `</div>`
@@ -94,10 +110,10 @@ function renderChooseFooter(b: OptionBlock): string {
     case 'requested':
       return (
         `<button type="button" class="choose-btn" disabled data-testid="choose-${id}">Choose this way</button>` +
-        `<span class="choose-note">Steps requested · waiting for the agent</span>`
+        `<span class="choose-note">Chosen · waiting for steps</span>`
       );
     case 'ready':
-      return `<a class="steps-link" href="#block-steps-${id}" data-testid="steps-link-${id}">Steps ready ↓</a>`;
+      return `<a class="steps-link" href="#block-steps-${id}" data-testid="steps-link-${id}">See steps</a>`;
   }
 }
 
@@ -106,7 +122,11 @@ function editButton(b: Block): string {
 }
 
 function renderOption(b: OptionBlock, planId: string): string {
-  const ribbon = b.recommended ? `<span class="ribbon">RECOMMENDED</span>` : '';
+  const chosen = b.steps.state !== 'none';
+  const tags = `${b.recommended ? '<span class="ribbon">RECOMMENDED</span>' : ''}${
+    chosen ? `<span class="ribbon ribbon--chosen" data-testid="chosen-${attr(b.id)}">Chosen</span>` : ''
+  }`;
+  const ribbon = tags === '' ? '' : `<div class="ribbons">${tags}</div>`;
   const why = b.recommended && b.why !== undefined ? `<p class="why">${esc(b.why)}</p>` : '';
   const summary =
     b.summary === undefined
@@ -122,12 +142,12 @@ function renderOption(b: OptionBlock, planId: string): string {
     `<span class="pattern">${esc(b.pattern)}</span>` +
     `</header>` +
     `${summary}` +
-    `<figure class="diagram">${diagram}${editButton(b)}</figure>` +
+    `<figure class="diagram">${diagram}${renderLegend(b.diagram.nodes.map((n) => n.status))}${editButton(b)}</figure>` +
     `<div class="reuses">${chips}</div>` +
     `${renderCost(b)}` +
     `${why}` +
     `<footer class="choose">${renderChooseFooter(b)}</footer>`;
-  const panel = ` role="tabpanel" aria-labelledby="tab-${attr(b.id)}"`;
+  const panel = ` role="tabpanel" aria-labelledby="tab-${attr(b.id)}"${chosen ? ' data-chosen=""' : ''}`;
   return blockShell(b, planId, inner, b.recommended ? ' block--recommended' : '', panel);
 }
 
@@ -147,7 +167,7 @@ function renderFindings(b: FindingsBlock, planId: string): string {
         `</li>`,
     )
     .join('');
-  const inner = `${diagram}<ul class="findings">${rows}</ul><p class="caption">${esc(b.summary)}</p>`;
+  const inner = `<p class="findings-summary">${esc(b.summary)}</p>${diagram}<ul class="findings">${rows}</ul>`;
   return blockShell(b, planId, inner);
 }
 
@@ -176,9 +196,8 @@ function renderContext(b: ContextBlock, planId: string): string {
 function renderVerdict(b: VerdictBlock, planId: string): string {
   const inner =
     `<div class="verdict">` +
-    `<span class="pick-chip">Pick ${b.letter}</span>` +
+    `<span class="pick-chip">Way ${b.letter}</span>` +
     `<strong class="verdict-name">${esc(b.optionName)}</strong>` +
-    `<p class="why">${esc(b.why)}</p>` +
     `</div>`;
   return blockShell(b, planId, inner);
 }

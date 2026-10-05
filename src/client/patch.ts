@@ -1,5 +1,5 @@
 import { shouldApply } from '../shared/frames';
-import { showOption } from './tabs';
+import { refreshTabOf, showOption } from './tabs';
 import { showToast } from './toast';
 
 export const SWAPPED_EVENT = 'pinpoint:swapped';
@@ -45,8 +45,13 @@ export function swapBlock(html: string, rev: number): HTMLElement | null {
 
   const selected = current.getAttribute('data-selected');
   if (selected !== null) next.setAttribute('data-selected', selected);
+  for (const opened of Array.from(current.querySelectorAll<HTMLElement>('details.thread--old[open]'))) {
+    const thread = CSS.escape(opened.dataset.thread ?? '');
+    next.querySelector(`details.thread--old[data-thread="${thread}"]`)?.setAttribute('open', '');
+  }
   current.replaceWith(next);
   markUpdated(next);
+  refreshTabOf(blockId);
   document.dispatchEvent(new CustomEvent(SWAPPED_EVENT, { detail: { blockId } }));
   return next;
 }
@@ -64,6 +69,7 @@ export function appendBlock(html: string, after: string | null): HTMLElement | n
   else grid.append(next);
   const stage = grid.closest('[data-stage]');
   if (stage !== null) revealStage(stage);
+  if (isOutOfView(next)) showToast(`Steps ready for Way ${next.dataset.way ?? '?'}`, () => jumpTo(next));
   return next;
 }
 
@@ -77,20 +83,26 @@ function isOutOfView(element: Element): boolean {
   return rect.bottom < 0 || rect.top > window.innerHeight;
 }
 
+function shortName(block: HTMLElement): string {
+  const { way, kind, label } = block.dataset;
+  if (way === undefined) return label ?? 'A card';
+  return kind === 'steps' ? `Steps for Way ${way}` : `Way ${way}`;
+}
+
 function jumpTo(block: HTMLElement): void {
   if (block.matches('.block--option') && block.dataset.block !== undefined) showOption(block.dataset.block);
   const motionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  block.scrollIntoView({ block: 'center', behavior: motionAllowed ? 'smooth' : 'auto' });
+  block.scrollIntoView({ block: 'start', behavior: motionAllowed ? 'smooth' : 'auto' });
   block.focus({ preventScroll: true });
 }
 
-/** Swaps the block like `swapBlock`, and toasts when the swap added an answer to a block outside the viewport. */
+/** Swaps the block like `swapBlock`; an added answer marks its tab unseen and toasts when the block is out of view. */
 export function swapBlockAnnouncingAnswer(html: string, rev: number): HTMLElement | null {
   const blockId = parseBlock(html)?.dataset.block;
   const before = blockId === undefined ? 0 : answeredCount(findBlock(blockId));
   const next = swapBlock(html, rev);
-  if (next !== null && answeredCount(next) > before && isOutOfView(next)) {
-    showToast(`Answer attached to ${next.dataset.label ?? 'a block'}`, () => jumpTo(next));
-  }
+  if (next === null || blockId === undefined || answeredCount(next) <= before) return next;
+  refreshTabOf(blockId, true);
+  if (isOutOfView(next)) showToast(`${shortName(next)} has a new answer`, () => jumpTo(next));
   return next;
 }

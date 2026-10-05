@@ -24,9 +24,19 @@ function currentTheme(): Theme | null {
   return isTheme(attribute) ? attribute : null;
 }
 
+function labelToggle(): void {
+  const toggle = document.querySelector('[data-testid="theme-toggle"]');
+  if (toggle === null) return;
+  const next = nextTheme(currentTheme(), window.matchMedia(DARK_QUERY).matches);
+  toggle.textContent = next === 'dark' ? 'Dark' : 'Light';
+  toggle.setAttribute('aria-label', `Switch to ${next} theme`);
+}
+
 export function initTheme(): void {
   const stored = storedTheme();
   if (stored !== null) document.documentElement.setAttribute('data-theme', stored);
+  labelToggle();
+  window.matchMedia(DARK_QUERY).addEventListener('change', labelToggle);
 }
 
 export function toggleTheme(): Theme {
@@ -37,5 +47,6 @@ export function toggleTheme(): Theme {
   } catch {
     // Storage can be unavailable; the attribute still applies for this page load.
   }
+  labelToggle();
   return next;
 }

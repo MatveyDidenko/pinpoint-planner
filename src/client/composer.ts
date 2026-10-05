@@ -1,4 +1,5 @@
 import type { BrowserMessage } from '../core/schema';
+import { revealConversation } from './conversation';
 import { DIAGRAM_CHANGED_EVENT, editedProposal, editedSketch, finishProposal, hasSketch } from './diagram-editor';
 import { clearDraft, loadDraft, saveDraft } from './draft';
 import { postMessage, UNREACHABLE_MESSAGE } from './messages';
@@ -8,16 +9,12 @@ import { OPTION_SHOWN_EVENT } from './tabs';
 
 export type ComposerKeyAction = 'send' | 'newline' | 'close' | 'none';
 
-const DEFAULT_HINT = 'Enter to send · Shift+Enter for a new line · Esc to close';
-const GAP_PX = 10;
+const DEFAULT_HINT = 'Enter to send · Shift+Enter for a new line · Esc closes and keeps your draft';
 
-export function composerKeyAction(
-  event: { key: string; shiftKey: boolean; isComposing: boolean },
-  textEmpty: boolean,
-): ComposerKeyAction {
+export function composerKeyAction(event: { key: string; shiftKey: boolean; isComposing: boolean }): ComposerKeyAction {
   if (event.isComposing) return 'none';
   if (event.key === 'Enter') return event.shiftKey ? 'newline' : 'send';
-  if (event.key === 'Escape' && textEmpty) return 'close';
+  if (event.key === 'Escape') return 'close';
   return 'none';
 }
 
@@ -38,12 +35,17 @@ export function initComposer(planId: string): void {
   const hint = document.createElement('span');
   hint.className = 'composer-hint';
   hint.textContent = DEFAULT_HINT;
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'composer-close';
+  closeButton.setAttribute('data-testid', 'composer-close');
+  closeButton.textContent = 'Close';
   const sendButton = document.createElement('button');
   sendButton.type = 'button';
   sendButton.className = 'composer-send';
   sendButton.setAttribute('data-testid', 'composer-send');
   sendButton.textContent = 'Send';
-  root.replaceChildren(head, versionChip, input, hint, sendButton);
+  root.replaceChildren(head, versionChip, input, hint, closeButton, sendButton);
 
   let openBlockId: string | null = null;
   let openThreadId: string | null = null;
@@ -60,12 +62,13 @@ export function initComposer(planId: string): void {
     return block !== null && block.dataset.block === openBlockId ? block : null;
   };
 
-  const position = () => {
-    const target = anchor();
-    if (target === null) return;
-    const page = root.offsetParent;
-    const pageTop = page === null ? 0 : page.getBoundingClientRect().top;
-    root.style.top = `${target.getBoundingClientRect().bottom - pageTop + GAP_PX}px`;
+  const place = () => anchor()?.after(root);
+
+  const showHint = (text = DEFAULT_HINT, error = false) => {
+    hint.toggleAttribute('data-error', error);
+    if (error) hint.setAttribute('role', 'alert');
+    else hint.removeAttribute('role');
+    hint.textContent = text;
   };
 
   const showVersion = () => {
@@ -103,7 +106,7 @@ export function initComposer(planId: string): void {
     showExcerpt(undefined);
     root.hidden = true;
     input.value = '';
-    hint.textContent = DEFAULT_HINT;
+    showHint();
   };
 
   const open = (block: HTMLElement, text: string | undefined, threadId: string | null = null) => {
@@ -113,15 +116,17 @@ export function initComposer(planId: string): void {
     const next = draftId();
     if (next !== previous) {
       input.value = next === null ? '' : loadDraft(planId, next);
-      hint.textContent = DEFAULT_HINT;
+      showHint();
     }
     const label = block.dataset.label ?? openBlockId ?? '';
     head.textContent = openThreadId === null ? `ASK ABOUT ${label}` : `REPLY · ${label}`;
     showExcerpt(text);
     showVersion();
     root.hidden = false;
-    position();
-    input.focus();
+    place();
+    input.focus({ preventScroll: true });
+    const motionAllowed = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    root.scrollIntoView({ block: 'nearest', behavior: motionAllowed ? 'smooth' : 'auto' });
   };
 
   const send = async () => {
@@ -147,11 +152,12 @@ export function initComposer(planId: string): void {
         ...(sketch === null ? {} : { sketch }),
       };
       await postMessage(planId, message);
+      revealConversation(planId, blockId);
       clearDraft(planId, draft);
       if (edited !== null || sketch !== null) finishProposal(blockId);
       clearSelection();
     } catch (error) {
-      hint.textContent = error instanceof Error ? error.message : UNREACHABLE_MESSAGE;
+      showHint(error instanceof Error ? error.message : UNREACHABLE_MESSAGE, true);
     } finally {
       sending = false;
       sendButton.disabled = false;
@@ -161,11 +167,11 @@ export function initComposer(planId: string): void {
   input.addEventListener('input', () => {
     const draft = draftId();
     if (draft !== null) saveDraft(planId, draft, input.value);
-    hint.textContent = DEFAULT_HINT;
+    if (hint.hasAttribute('data-error')) showHint();
   });
 
   input.addEventListener('keydown', (event) => {
-    const action = composerKeyAction(event, input.value === '');
+    const action = composerKeyAction(event);
     if (action === 'none' || action === 'newline') return;
     event.preventDefault();
     if (action === 'send') void send();
@@ -173,6 +179,7 @@ export function initComposer(planId: string): void {
   });
 
   sendButton.addEventListener('click', () => void send());
+  closeButton.addEventListener('click', clearSelection);
 
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
@@ -207,10 +214,11 @@ export function initComposer(planId: string): void {
     if (openBlockId !== null && (target === null || target.getClientRects().length === 0)) clearSelection();
   });
 
+  // A reply composer sits inside its card, so swapping that card detaches it along with its focus.
   document.addEventListener(SWAPPED_EVENT, (event) => {
     const { blockId } = (event as CustomEvent<{ blockId: string }>).detail;
-    if (blockId === openBlockId) position();
+    if (blockId !== openBlockId || root.isConnected) return;
+    place();
+    if (document.activeElement === document.body) input.focus({ preventScroll: true });
   });
-
-  window.addEventListener('resize', position);
 }

@@ -12,7 +12,7 @@ async function askVerdict(request: Parameters<typeof seedPlan>[0], id: string): 
   });
 }
 
-test('an answer to a block scrolled out of view shows a toast and Jump brings the block into view', async ({
+test('an answer to a block scrolled out of view shows a toast and Show brings the block into view', async ({
   page,
   request,
 }) => {
@@ -28,11 +28,9 @@ test('an answer to a block scrolled out of view shows a toast and Jump brings th
 
   await request.post(`/api/plans/${id}/answers`, { data: { questionId: 'm-1', md: 'Because it is simplest.' } });
 
-  const label = await page.locator(BLOCK).getAttribute('data-label');
   const toast = page.getByTestId('toast');
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText('Answer attached to');
-  await expect(toast).toContainText(label ?? 'missing label');
+  await expect(toast).toContainText('Recommended has a new answer');
 
   await page.getByTestId('toast-jump').click();
   await expect(page.locator(BLOCK)).toBeInViewport();
@@ -56,7 +54,7 @@ test('no toast when the answered block is already visible', async ({ page, reque
   await expect(page.getByTestId('toast')).toBeHidden();
 });
 
-test('Jump to an answer on a hidden option switches to its tab', async ({ page, request }) => {
+test('Show on an answer to a hidden option switches to its tab', async ({ page, request }) => {
   const id = planId();
   await page.setViewportSize({ width: 1280, height: 600 });
   await seedPlan(request, id);
@@ -71,7 +69,7 @@ test('Jump to an answer on a hidden option switches to its tab', async ({ page, 
 
   const toast = page.getByTestId('toast');
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText('Answer attached to Way B · Proactive refresh timer');
+  await expect(toast).toContainText('Way B has a new answer');
 
   await page.getByTestId('toast-jump').click();
   await expect(page.getByTestId('tab-opt-b')).toHaveAttribute('aria-selected', 'true');

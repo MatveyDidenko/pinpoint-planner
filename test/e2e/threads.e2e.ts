@@ -59,11 +59,12 @@ test('Reply under an answer sends a follow-up into the same thread', async ({ pa
   });
   await expect(composer).toBeHidden();
   const followup = page.locator('[data-testid="thread-m-1"] .exchange--followup');
-  await expect(followup).toContainText('and when the laptop wakes? · Asked');
+  await expect(followup).toContainText('and when the laptop wakes?');
+  await expect(followup).toContainText('Waiting for the agent');
   await expect(page.getByTestId('reply-m-1')).toHaveCount(0);
 });
 
-test('after Done reviewing the Reply button is disabled', async ({ page, request }) => {
+test('after handing back the Reply button is disabled', async ({ page, request }) => {
   const id = planId('done');
   await seedPlan(request, id);
   await ask(request, id, 'e2e-thread-0003', 'why the timer?');
@@ -74,6 +75,7 @@ test('after Done reviewing the Reply button is disabled', async ({ page, request
   const reply = page.getByTestId('reply-m-1');
   await expect(reply).toBeEnabled();
   await page.getByTestId('done').click();
+  await page.getByTestId('done-yes').click();
 
   await expect(reply).toBeDisabled();
   await reply.click({ force: true });

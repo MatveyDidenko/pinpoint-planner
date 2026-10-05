@@ -83,7 +83,7 @@ async function centre(locator: Locator): Promise<{ x: number; y: number }> {
 test('dragging a box moves it and its arrows follow', async ({ page, request }) => {
   const editor = await openEditor(page, request, 'drag');
   const rect = editor.locator('[data-node-id="api"] rect');
-  await expect(rect).toHaveAttribute('x', '330.4');
+  await expect(rect).toHaveAttribute('x', '334');
   await expect(rect).toHaveAttribute('y', '76');
 
   const start = await centre(rect);
@@ -92,9 +92,9 @@ test('dragging a box moves it and its arrows follow', async ({ page, request }) 
   await page.mouse.move(start.x + 80, start.y + 40, { steps: 5 });
   await page.mouse.up();
 
-  await expect(rect).toHaveAttribute('x', '410.4');
+  await expect(rect).toHaveAttribute('x', '414');
   await expect(rect).toHaveAttribute('y', '116');
-  await expect(editor.locator('path.edge[data-from="wrapper"][data-to="api"]')).toHaveAttribute('d', /410\.4 133$/);
+  await expect(editor.locator('path.edge[data-from="wrapper"][data-to="api"]')).toHaveAttribute('d', / 414 133$/);
 });
 
 test('arrow keys move the focused box and it cannot leave the canvas', async ({ page, request }) => {
@@ -263,12 +263,14 @@ test('C then Enter connects with the keyboard and a drop on the same box adds no
   await page.keyboard.press('Enter');
   await expect(editor.locator('path.edge[data-from="session"][data-to="caller"]')).toHaveCount(1);
   await expect(page.getByTestId('rename-input')).toHaveCount(0);
-  await expect(page.getByTestId('editor-note')).toHaveText('');
+  await expect(page.getByTestId('editor-note')).toHaveText(
+    'Enter rename · S status · C connect · Delete remove · arrows move',
+  );
 
   const api = editor.locator('[data-node-id="api"] rect');
   await dragBetween(page, page.getByTestId('handle-api'), api);
   await expect(editor.locator('path.edge')).toHaveCount(5);
-  await expect(api).toHaveAttribute('x', '330.4');
+  await expect(api).toHaveAttribute('x', '334');
 });
 
 test('the handles hide at twelve arrows and the toolbar says why', async ({ page, request }) => {

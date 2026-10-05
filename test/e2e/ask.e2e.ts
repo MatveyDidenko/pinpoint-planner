@@ -6,7 +6,7 @@ const planId = () => `ask-${Date.now()}`;
 const OPT_B_NAME = '[data-block="opt-b"] .option-name';
 const OPT_B_PILL = '[data-block="opt-b"] [data-state="asked"]';
 
-test('click a block, type, Enter → POST /messages observed and the pill reads Asked inside that block', async ({
+test('click a block, type, Enter → POST /messages observed and the pill reads Waiting inside that block', async ({
   page,
   request,
 }) => {
@@ -28,7 +28,7 @@ test('click a block, type, Enter → POST /messages observed and the pill reads 
   const body = (await posted).postDataJSON();
 
   expect(body).toMatchObject({ kind: 'ask', blockId: 'opt-b', text: 'why the timer?' });
-  await expect(page.locator(OPT_B_PILL)).toContainText('Asked');
+  await expect(page.locator(OPT_B_PILL)).toContainText('Waiting for the agent');
   await expect(page.getByTestId('composer')).toBeHidden();
   await expect(page.locator('[data-block][data-selected]')).toHaveCount(0);
 });
@@ -51,7 +51,7 @@ test('typed text and focus survive the selected block being swapped by a poll de
     data: { clientId: 'e2e-ask-0001', kind: 'ask', blockId: 'opt-b', text: 'why the timer?' },
   });
   await page.goto(`/plans/${id}`);
-  await expect(page.locator(OPT_B_PILL)).toContainText('Asked');
+  await expect(page.locator(OPT_B_PILL)).toContainText('Waiting for the agent');
 
   await showOption(page, 'opt-b');
   await page.locator(OPT_B_NAME).click();
@@ -59,7 +59,7 @@ test('typed text and focus survive the selected block being swapped by a poll de
 
   await request.get(`/api/plans/${id}/poll?timeoutMs=0`);
 
-  await expect(page.locator('[data-block="opt-b"] [data-state="delivered"]')).toContainText('Delivered');
+  await expect(page.locator('[data-block="opt-b"] [data-state="delivered"]')).toContainText('The agent is reading');
   await expect(page.getByTestId('composer-input')).toHaveValue('draft text');
   await expect(page.getByTestId('composer-input')).toBeFocused();
   await expect(page.locator('[data-block="opt-b"]')).toHaveAttribute('data-selected', '');

@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   await seedPlan(request, PLAN_ID);
 });
 
-test('the fixture plan renders three diagrams, one visible card, one ribbon, the pick and five stage eyebrows', async ({
+test('the fixture plan renders three diagrams, one visible card, one ribbon, the recommendation and five stage eyebrows', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -17,13 +17,13 @@ test('the fixture plan renders three diagrams, one visible card, one ribbon, the
   await expect(page.locator(DIAGRAMS)).toHaveCount(3);
   await expect(page.locator('.ribbon')).toHaveCount(1);
   await expect(page.locator('.ribbon')).toHaveText('RECOMMENDED');
-  await expect(page.locator('[data-kind="verdict"] .pick-chip')).toHaveText('Pick A');
+  await expect(page.locator('[data-kind="verdict"] .pick-chip')).toHaveText('Way A');
 
   await expect(page.locator('.stage-eyebrow')).toHaveText([
     '01 · How it works today',
     "02 · What's already here",
     '03 · Three ways',
-    '04 · The pick',
+    '04 · Recommended',
     '05 · Steps',
   ]);
   await expect(page.getByTestId('stage-05')).toBeHidden();

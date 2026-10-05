@@ -67,12 +67,12 @@ test('with Draw on, dragging a box draws instead of moving it', async ({ page, r
   await stroke(page, centre, 80, 40);
 
   await expect(editor.locator('polyline.mark')).toHaveCount(1);
-  await expect(rect).toHaveAttribute('x', '330.4');
+  await expect(rect).toHaveAttribute('x', '334');
   await expect(rect).toHaveAttribute('y', '76');
 
   await page.getByTestId('draw').click();
   await stroke(page, centre, 80, 40);
-  await expect(rect).toHaveAttribute('x', '410.4');
+  await expect(rect).toHaveAttribute('x', '414');
   await expect(editor.locator('polyline.mark')).toHaveCount(1);
 });
 

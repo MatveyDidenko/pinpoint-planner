@@ -162,7 +162,7 @@ interface Transition { state: PlanState; touched: string[]; appended?: { blockId
 
 Block order is fixed: `context`, `findings`, options A–D (one letter per option, in input order), `verdict`, then `steps-<optionId>` blocks in the order
 they were appended. The page renders them under five numbered stages: 01 How it works today,
-02 What's already here, 03 Two ways / Three ways / Four ways (titled by the option count), 04 The pick,
+02 What's already here, 03 Two ways / Three ways / Four ways (titled by the option count), 04 Recommended,
 05 Steps. A stored plan without a context block (saved before `context` was required) keeps the
 four-stage numbering starting at What's already here.
 
@@ -181,7 +181,7 @@ ask order; the thread is the `threadId` on each exchange.
 
 ### Derivations (`src/core/state.ts`)
 
-- `blockLabel`: context → "How it works today"; findings → "What's already here"; option → "Way B · <name>"; verdict → "The pick";
+- `blockLabel`: context → "How it works today"; findings → "What's already here"; option → "Way B · <name>"; verdict → "Recommended";
   steps → "Steps · Way A · <name>".
 - `pendingMessages(s)`: messages without `ackedAt`, in `at` order. This filter *is* the feedback queue.
 - `untouchedHash(plan, touched, renderBlock)`: sha16 of the rendered untouched blocks joined by `\n`
@@ -218,8 +218,11 @@ computePresence({ review, messages, pollers }):
   any message with deliveredAt && !ackedAt → 'working'
   pollers > 0 → 'listening'
   else → 'waiting'
-presenceLabel(p, undelivered): 'Agent not on the line' (+ ' · 2 waiting' when undelivered > 0) | 'Agent on the line' | 'Agent working…' | 'Handed back to the agent'
+presenceLabel(p, undelivered): 'Agent not on the line' (+ ' · 2 questions waiting' when undelivered > 0) | 'Agent on the line' | 'Agent working…' | 'Handed back to the agent'
 ```
+
+The server passes `undelivered` as the count of pending `ask` messages not yet delivered, so a
+`choose` or `done` never shows as a waiting question.
 
 ## 5. Protocol
 
@@ -347,7 +350,8 @@ Guards (`src/server/guard.ts`): the URL hostname must be `127.0.0.1`, `localhost
 Mutating routes also reject a present `Origin` whose hostname is not loopback (CSRF from a web page),
 and bodies over 1 MB (413). Error bodies: `{code, message, issues?}`; 400 for `INVALID_INPUT`,
 `NOT_AN_OPTION`, `KIND_MISMATCH`, `RECOMMENDED_LOCKED`; 404 `NOT_FOUND`; 409 `STEPS_EXIST`,
-`ALREADY_ANSWERED`, `BLOCK_FULL`, `THREAD_BUSY` ("Wait for the answer before replying."), `HANDED_BACK`; 500 `INVARIANT_VIOLATION`, `IO`.
+`ALREADY_ANSWERED`, `BLOCK_FULL` ("This card holds 40 questions, the most it can take.", replies
+included), `THREAD_BUSY` ("Wait for the answer before replying."), `HANDED_BACK`; 500 `INVARIANT_VIOLATION`, `IO`.
 
 ### Poll handler
 
@@ -406,97 +410,127 @@ caps-tracked 12 px eyebrows in accent, 40 px stage gaps. Accent is "the plan tal
 is "the held line" (questions, waiting, agent working).
 
 - **Header** (sticky): eyebrow `PINPOINT`, plan title, task sentence; right: presence chip
-  (`data-testid=presence`, `data-state`), "Done reviewing" (`data-action=done`,
-  `data-testid=done`), theme toggle (`data-testid=theme-toggle`).
+  (`data-testid=presence`, `data-state`, `tabindex="-1"`), "Hand back to agent"
+  (`data-action=hand-back`, `data-testid=done`), theme toggle (`data-testid=theme-toggle`). Hand back
+  to agent swaps itself for an inline confirm (`data-testid=done-confirm`) reading "Hand back now?"
+  with "Hand back" (`data-action=done`, `data-testid=done-yes`) and "Keep reviewing"
+  (`data-testid=done-no`); focus moves to Keep reviewing when the confirm opens, back to Hand back to
+  agent when it closes, and to the presence chip once the hand-back lands.
 - **Stages**: `01 · How it works today` (context block: the summary as a serif paragraph, the terms
   as `<dl class="terms">` with each term in mono, then each flow as
   `<section class="flow" data-testid="flow-<i>">` with its name, numbered steps and an optional
   diagram with legend, marker `mk-context-<i>` and no Edit diagram button), `02 · What's already here`
   (findings block: optional codebase-map diagram, legend, rows `path · ROLE · note`), `03 · Three ways`
-  (titled `Two ways`, `Three ways` or `Four ways` by the option count; option tabs above the cards,
-  one card visible at a time, see **Option tabs**), `04 · The pick` (verdict callout: 3 px accent left
-  border, "Pick B" chip, the why), `05 · Steps`
-  (hidden until the first steps block; `repeat(auto-fit, minmax(320px, 1fr))` grid so a second
-  chosen option lands beside the first).
-- **Option card**: letter badge, name, pattern tag ("what engineers call it"), the summary as
-  `<p class="option-summary" data-testid="summary-<id>">` in the serif reading face, diagram (reused
-  nodes filled `--accent-soft`, new dashed `--hold`, changed `--accent` stroke, external `--faint`),
-  reuses as mono chips, cost row (effort pips 1–3 and a risk pip, both `aria-hidden`, then the words
+  (titled `Two ways`, `Three ways` or `Four ways` by the option count; a `stage-hint` line "Click any
+  card, or select text in it, to ask about it."; option tabs above the cards, one card visible at a
+  time, see **Option tabs**), `04 · Recommended` (verdict callout: 3 px accent left border, a "Way B"
+  chip and the option's name), `05 · Steps` (hidden until the first steps block;
+  `repeat(auto-fit, minmax(320px, 1fr))` grid so a second chosen option lands beside the first).
+- **Option card**: `RECOMMENDED` and `Chosen` ribbons when they apply, letter badge, name, pattern tag
+  ("what engineers call it"), the summary as `<p class="option-summary" data-testid="summary-<id>">`
+  in the serif reading face, diagram (reused nodes filled `--accent-soft`, new dashed `--hold`,
+  changed `--accent` stroke, external `--faint`) with a legend naming only the statuses it uses and
+  an Edit diagram button, reuses as mono chips, cost as words only,
   `<span class="cost-label" data-testid="cost-<id>">Medium effort · Low risk</span>` with S/M/L read
-  as Small/Medium/Large, then the sentence), footer "Choose this way"
-  (`data-action=choose`, `data-testid=choose-<id>`). Recommended card: 2 px accent border,
-  `RECOMMENDED` ribbon, why line. Server-rendered states: `requested` → button disabled, "Steps
-  requested · waiting for the agent"; `ready` → "Steps ready ↓" link to the steps block.
+  as Small/Medium/Large, then the sentence, the why line on the recommended card (2 px accent border),
+  and a footer by `steps.state`: `none` → "Choose this way" (`data-action=choose`,
+  `data-testid=choose-<id>`); `requested` → that button disabled plus "Chosen · waiting for steps";
+  `ready` → a "See steps" link (`data-testid=steps-link-<id>`) to the steps block.
+- **Busy cards**: a block with an unanswered exchange, or an option whose steps are `requested`,
+  renders `data-busy` and a "The agent is working…" line with a spinner at its top; everything but
+  that line, the ribbons, the footer, the toggle and the conversation dims to 60 % opacity.
 - **Option tabs**: `<div class="option-tabs" role="tablist">` above `.options`, one
   `<button role="tab" data-testid="tab-<id>" aria-controls="block-<id>">` per option labelled
   `<letter> · <name>` (full label in `title`, long names truncate with an ellipsis), a ★ on the
-  recommended tab. Visibility lives in `<style id="option-tab-style">` holding one rule,
-  `.options > .block--option:not([data-block="<shown id>"]){display:none}`, so a live block swap
-  never changes which card shows. The server renders it for the recommended option; the client
-  (`tabs.ts`) rewrites it on a tab click and follows the WAI-ARIA tabs pattern (roving `tabindex`,
-  ArrowLeft/ArrowRight wrap, Home/End). The toast's Jump switches to a hidden option's tab first, and an
-  answer on a hidden option counts as out of view. Active tab: 2 px `--accent` underline, ink text;
-  inactive `--muted`; 44 px tap target. At 390 px the tab row scrolls inside itself, never the page.
+  recommended tab and a "Chosen" tag once chosen. Visibility lives in `<style id="option-tab-style">`
+  holding one rule, `.options > .block--option:not([data-block="<shown id>"]){display:none}`, so a
+  live block swap never changes which card shows. The server renders it for the recommended option;
+  the client (`tabs.ts`) rewrites it on a tab click and follows the WAI-ARIA tabs pattern (roving
+  `tabindex`, ArrowLeft/ArrowRight wrap, Home/End). An unselected tab carries a status dot: `--hold`
+  while its card has a question waiting, `--accent` when an answer landed since it was last shown;
+  the tab's `aria-label` spells out the same state ("…, recommended, chosen, new answer"). The toast's
+  Show switches to a hidden option's tab first, and an answer on a hidden option counts as out of
+  view. Active tab: 2 px `--accent` underline, ink text; inactive `--muted`; 44 px tap target. At
+  390 px the tab row scrolls inside itself, never the page.
 - **Block contract**: `<section class="block" data-block="opt-b" data-kind="option" data-rev="3"
-  data-label="Way B · …" tabindex="0" data-testid="block-opt-b">` with a server-rendered Ask button
-  (`data-action=ask`, `data-testid=ask-opt-b`, opacity 0 → 1 on hover/focus/selected, always in the
-  DOM so hover mutates nothing) and a `.qa` slot. The only client-side mutations inside a block are
-  `data-selected`, the `is-updated` class and, after hand-back, `disabled` on Reply buttons.
+  data-label="Way B · …" tabindex="0" data-testid="block-opt-b">`, a conversation toggle once the
+  block has exchanges, and a `.qa` slot. Asking starts from the card itself, with no separate Ask
+  button (see **Pointing**). The client-side mutations inside a block are `data-selected`, the `is-updated` class,
+  the conversation toggle's hidden state, the `open` state of old threads and, after hand-back,
+  `disabled` on Reply and Edit diagram buttons.
 - **Pointing**: click anywhere in a block that is not inside `[data-action], a, button, textarea,
-  input`, or press Enter on a focused block → `data-selected`, 2 px accent outline, and the composer
-  docks beneath it. One selection at a time; Esc deselects.
-- **Composer** (`#composer`, `data-testid=composer`): one element positioned inside `.page` under
-  the selected block (`top = offsetTop + offsetHeight + 10`, repositioned on resize and after a
-  block swap), outside every block's DOM so a swap cannot destroy it. Heading `ASK ABOUT <label>`
-  plus the excerpt when one was captured; textarea (`data-testid=composer-input`); hint "Enter to
-  send · Shift+Enter for a new line · Esc to close"; Send (`data-testid=composer-send`). Enter sends
-  (`isComposing` guarded), Shift+Enter newline, Esc closes only when empty. Drafts persist per
-  plan+block in sessionStorage (try/catch).
+  input, summary` or the composer, or press Enter on a focused block → `data-selected`, 2 px accent
+  outline, and the composer opens beneath it. One selection at a time; Esc deselects.
+- **Composer** (`#composer`, `data-testid=composer`): one element moved inline in the DOM, right after
+  the selected block or after the thread being replied to, so it pushes the content below it down
+  instead of floating. Heading `ASK ABOUT <label>` (or `REPLY · <label>`) plus the excerpt when one
+  was captured; textarea (`data-testid=composer-input`); hint "Enter to send · Shift+Enter for a new
+  line · Esc closes and keeps your draft"; Close (`data-testid=composer-close`) and Send
+  (`data-testid=composer-send`). Enter sends (`isComposing` guarded), Shift+Enter adds a newline, Esc
+  closes. Drafts persist per plan+block (per plan+block+thread for replies) in sessionStorage
+  (try/catch). When a swap detaches a reply composer with its card, it is placed again and gets its
+  focus back.
 - **Excerpt**: on send, `excerpt` = the non-collapsed selection text inside the block, or the
   `data-node-label` of a clicked diagram node, ≤ 200 chars. Shown in the composer heading, the
   question pill and the poll message.
 - **Pending → answer, in place**: the POST response carries the re-rendered block; the client swaps
   it (`template.innerHTML = html; el.replaceWith(…)`) and re-applies `data-selected`. The `.qa` slot
-  shows a hold-dashed pill "You asked: … · Asked" then "· Delivered to the agent" (both
-  server-rendered). When the answer lands, the SSE `block` frame swaps the same block: the pill settles
-  into a solid card with the rendered markdown and optional small diagram; `is-updated` plays a 900 ms
-  accent-soft sweep. If the block is off-screen, a toast (`data-testid=toast`) "Answer attached to
-  Way B · Jump" appears for 6 s. Nothing else on the page re-renders or loses scroll position.
-- **Threads**: the `.qa` slot groups exchanges into `.thread` divs (`data-testid=thread-<thread>`)
-  in first-ask order; every exchange after a thread's first carries `exchange--followup`. A thread
-  whose last exchange is answered ends with a server-rendered Reply button (`data-action=reply`,
-  `data-testid=reply-<thread>`). Reply opens the composer under that thread with heading
-  `REPLY · <label>`, a draft keyed `<block>:<thread>`, and posts the ask with `threadId`. A 409
-  `THREAD_BUSY` keeps the text and shows the server's message as the hint. Hand-back closes an open
-  editor and disables every Reply and Edit diagram button, including those in blocks swapped in later.
+  shows a hold-dashed pill "You asked: …" with "Waiting for the agent", then "The agent is reading"
+  (both server-rendered). When the answer lands, the SSE `block` frame swaps the same block: the pill
+  settles into a solid card with the rendered markdown and optional small diagram; `is-updated` plays
+  a 900 ms accent-soft sweep. If the block is off-screen, a toast (`data-testid=toast`) "Way B has a
+  new answer" with a Show button (`data-testid=toast-jump`) appears for 6 s, paused while hovered or
+  focused; a steps block appended off-screen toasts "Steps ready for Way A". Nothing else on the page
+  re-renders or loses scroll position.
+- **Conversation toggle**: a block with exchanges renders "Hide conversation (N)"
+  (`data-action=toggle-qa`, `data-testid=qa-toggle-<block>`, `aria-expanded`) above its `.qa` slot.
+  Hiding sets `.qa[hidden]`, flips the label to "Show conversation (N)", closes a reply composer open
+  inside, and is stored per plan+block in sessionStorage, so it survives reloads and live swaps.
+  Sending a question or reply on that block shows the conversation again and clears the stored
+  choice.
+- **Threads**: the `.qa` slot groups exchanges into threads (`data-testid=thread-<thread>`) in
+  first-ask order; every exchange after a thread's first carries `exchange--followup`. The last two
+  threads, and any thread with an open question, render as `<div class="thread">`; older answered
+  threads collapse into `<details class="thread thread--old">` whose summary reads "You asked: …"
+  with "Show answer" / "Hide answer". An opened old thread stays open across a live swap (matched by
+  thread id). A thread whose last exchange is answered ends with a server-rendered Reply button
+  (`data-action=reply`, `data-testid=reply-<thread>`). Reply opens the composer under that thread with
+  heading `REPLY · <label>`, a draft keyed `<block>:<thread>`, and posts the ask with `threadId`. A
+  409 `THREAD_BUSY` keeps the text and shows the server's message as the hint; replies count toward
+  the card's 40 questions. Hand-back closes an open editor and disables every Reply and Edit diagram
+  button, including those in blocks swapped in later.
 - **Diagram editor** (`diagram-editor.ts`): Edit diagram (`data-testid=edit-<block>`) swaps the
   figure for `data-testid=editor-<block>`, one editor at a time. Toolbar: Add box (`add-box`, disabled
-  at 8), Status (`status-selected`), Delete (`delete-selected`), Reset (`reset-diagram`), Draw (`draw`,
-  `aria-pressed`), Undo (`undo-stroke`), Clear (`clear-strokes`), a polite note (`editor-note`), Ask
-  about my version (`ask-version`) and Done editing (`done-editing`); every control is 44 px tall.
-  Boxes drag, move with the arrow keys (Shift for 32 px), rename on double-click or Enter, cycle
-  status with S, connect from a handle or with C then Enter, and delete with Delete; boxes and handles
-  carry invisible 44 px tap areas beneath them. The graph is kept per plan+block in sessionStorage
-  with the diagram it was edited from, dropped on open once the agent's diagram differs, and survives
-  a live swap of the block. Draw turns pointer
-  strokes into `<polyline class="mark">` in `--mark` (#c8102e light, #ff6b81 dark, clear of the amber
-  `--hold` that means waiting), at most 200 points a stroke and 50 strokes; while Draw is on, boxes
-  do not drag or rename. Strokes survive a live swap but not Done editing or a reload. Ask about my
-  version opens the composer with a chip ("With your edited diagram · 2 changes", "With your
-  drawing", or both); on send the edited graph goes as `proposal` when it differs from the agent's,
-  and strokes go as `sketch`: the SVG is cloned with its computed styles inlined, its viewBox widened
-  to cover every stroke, drawn through an `Image` onto a `<canvas>` at 2x over the canvas background,
-  and sent as `toDataURL('image/png')`. An empty drawing is not attached. A successful send closes
-  the editor. The thread shows the proposal as "YOUR VERSION" and the sketch as
+  at 8), Change status (`status-selected`), Delete (`delete-selected`), Draw (`draw`, `aria-pressed`),
+  Undo stroke (`undo-stroke`), Clear drawing (`clear-strokes`), Ask about my version (`ask-version`),
+  Reset to agent's version (`reset-diagram`), Done editing (`done-editing`) and a polite note
+  (`editor-note`); every control is 44 px tall. The note reads "Enter rename · S status · C connect ·
+  Delete remove · arrows move" while a box has focus and Draw is off, and gives way to the connect
+  prompt ("Connecting from <box>: click a box, or focus one and press Enter. Esc cancels") and to the
+  arrow and stroke limits. Boxes drag, move with the arrow keys (Shift for 32 px), rename on
+  double-click or Enter, cycle status with S, connect from a handle or with C then Enter, and delete
+  with Delete; boxes and handles carry invisible 44 px tap areas beneath them. The graph is kept per
+  plan+block in sessionStorage with the diagram it was edited from, dropped on open once the agent's
+  diagram differs, and survives a live swap of the block. Draw turns pointer strokes into
+  `<polyline class="mark">` in `--mark` (#c8102e light, #ff6b81 dark, clear of the amber `--hold`
+  that means waiting), at most 200 points a stroke and 50 strokes; while Draw is on, boxes do not drag
+  or rename. Strokes survive a live swap but not Done editing or a reload. Ask about my version opens
+  the composer with a chip ("With your edited diagram · 2 changes", "With your drawing", or both); on
+  send the edited graph goes as `proposal` when it differs from the agent's, and strokes go as
+  `sketch`: the SVG is cloned with its computed styles inlined, its viewBox widened to cover every
+  stroke, drawn through an `Image` onto a `<canvas>` at 2x over the canvas background, and sent as
+  `toDataURL('image/png')`. An empty drawing is not attached. A successful send closes the editor.
+  The thread shows the proposal as "YOUR VERSION" and the sketch as
   `<img class="sketch" alt="Your drawing" data-testid="sketch-<message>">` before the question.
 - **Choose**: posts `choose`; the card re-renders `requested`; when `append-steps` lands, the
   `appended` frame inserts the steps block (stage 05 fades in on first use), the card re-renders
   `ready`. A second choice appends another column.
-- **Presence chip**: `waiting` grey dot + "Agent not on the line" (+ "· 2 waiting"); `listening`
-  accent dot with slow pulse; `working` hold dot with spinner; `handed-back` "Handed back to the
-  agent" with the composer disabled. Labels come from `src/core/presence.ts`.
-- **Motion**: pulse, spinner, the sweep and the composer's 180 ms entrance only; all removed under
-  `prefers-reduced-motion`. `:focus-visible` is a 2 px accent ring everywhere.
+- **Presence chip**: `waiting` grey dot + "Agent not on the line" (+ "· 2 questions waiting", counting
+  undelivered questions only); `listening` accent dot with slow pulse; `working` hold dot with
+  spinner; `handed-back` "Handed back to the agent" with the composer disabled. Labels come from
+  `src/core/presence.ts`.
+- **Motion**: pulse, spinners, the sweep, the steps stage fade and the composer's 180 ms entrance
+  only; all removed under `prefers-reduced-motion`. `:focus-visible` is a 2 px accent ring everywhere.
 - **Phone width**: 16 px gutters, single column, diagrams scroll inside their figure, no page-level
   horizontal scroll (asserted at 390 px).
 
@@ -601,7 +635,7 @@ pins the `verify` command list and the dependency list.
 | Acronym check (undefined acronym → issue at its path, `open`, `PUT` and `patch-block` reject) | quality, schema | — | — | — |
 | Skill asks for today's flows and terms before the ways, and a summary per way | skill | — | — | — |
 | Three diagrams, one recommended, verdict | layout, svg, render-blocks | blocks.html = renderBlock | — | renders (3 svg, 1 ribbon, verdict) |
-| Option tabs (one card shown, tab switch, keys, live swap keeps the tab, Jump switches tab), cost words | render-page, render-blocks | — | — | renders, tabs, toast |
+| Option tabs (one card shown, tab switch, keys, live swap keeps the tab, Show switches tab), cost words | render-page, render-blocks | — | — | renders, tabs, toast |
 | Point and ask (message, pill, excerpt) | state | messages (pill html, dedupe, 404) | — | ask, keyboard-excerpt |
 | Threads (fresh ask starts one, reply joins it, `THREAD_BUSY`, `threadId` only on ask, load backfill) | state, schema, persistence | messages (409 `THREAD_BUSY`) | — | threads |
 | Thread grouping, follow-up styling, Reply button, reply composer, disabled after hand-back | render-blocks | — | — | threads |

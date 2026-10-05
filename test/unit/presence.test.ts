@@ -48,7 +48,8 @@ describe('presence', () => {
 
   it('labels match the spec strings', () => {
     expect(presenceLabel('waiting', 0)).toBe('Agent not on the line');
-    expect(presenceLabel('waiting', 2)).toBe('Agent not on the line · 2 waiting');
+    expect(presenceLabel('waiting', 1)).toBe('Agent not on the line · 1 question waiting');
+    expect(presenceLabel('waiting', 2)).toBe('Agent not on the line · 2 questions waiting');
     expect(presenceLabel('listening', 0)).toBe('Agent on the line');
     expect(presenceLabel('working', 0)).toBe('Agent working…');
     expect(presenceLabel('handed-back', 0)).toBe('Handed back to the agent');

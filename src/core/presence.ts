@@ -21,6 +21,8 @@ export function computePresence(input: {
 }
 
 export function presenceLabel(p: Presence, undelivered: number): string {
-  if (p === 'waiting' && undelivered > 0) return `${PRESENCE_LABELS.waiting} · ${undelivered} waiting`;
+  if (p === 'waiting' && undelivered > 0) {
+    return `${PRESENCE_LABELS.waiting} · ${undelivered} question${undelivered === 1 ? '' : 's'} waiting`;
+  }
   return PRESENCE_LABELS[p];
 }

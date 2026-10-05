@@ -35,7 +35,7 @@ export function blockLabel(block: Block): string {
     case 'option':
       return `Way ${block.letter} · ${block.name}`;
     case 'verdict':
-      return 'The pick';
+      return 'Recommended';
     case 'steps':
       return `Steps · Way ${block.letter} · ${block.optionName}`;
   }
@@ -154,7 +154,7 @@ function appendMessage(state: PlanState, message: Message): PlanState {
 }
 
 function assertOpen(state: PlanState): void {
-  if (state.review === 'handed-back') throw new StateError('HANDED_BACK', 'the plan was already handed back');
+  if (state.review === 'handed-back') throw new StateError('HANDED_BACK', 'This plan was already handed back.');
 }
 
 function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition & { message: Message } {
@@ -162,7 +162,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
   const block = m.blockId === undefined ? undefined : findBlock(state, m.blockId);
   if (block === undefined) throw new StateError('NOT_FOUND', `no block ${m.blockId ?? '(none)'}`);
   if (block.qa.length >= MAX_EXCHANGES)
-    throw new StateError('BLOCK_FULL', `block ${block.id} has ${MAX_EXCHANGES} questions`);
+    throw new StateError('BLOCK_FULL', `This card holds ${MAX_EXCHANGES} questions, the most it can take.`);
   if (m.threadId !== undefined) {
     const last = block.qa.findLast((exchange) => exchange.threadId === m.threadId);
     if (last === undefined) throw new StateError('NOT_FOUND', `no thread ${m.threadId} on block ${block.id}`);

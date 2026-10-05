@@ -45,42 +45,42 @@ function generateDag(next: () => number): Graph {
 }
 
 describe('measureLabel', () => {
-  it('clamps between 72 and 180', () => {
+  it('clamps between 72 and 306', () => {
     expect(measureLabel('a')).toBe(72);
     expect(measureLabel('Fetch wrapper')).toBe(111.6);
-    expect(measureLabel('x'.repeat(40))).toBe(180);
+    expect(measureLabel('x'.repeat(40))).toBe(306);
   });
 });
 
 describe('layoutGraph', () => {
   it('fixture graphs get the expected layers and coordinates', () => {
     const a = summarise(diagramOf('opt-a'));
-    expect(a.width).toBe(626.4);
+    expect(a.width).toBe(630);
     expect(a.height).toBe(134);
     expect(a.nodes).toEqual({
       caller: { layer: 0, x: 24, y: 24, w: 82.8, h: 34 },
       wrapper: { layer: 1, x: 162.8, y: 24, w: 111.6, h: 34 },
-      refresh: { layer: 2, x: 330.4, y: 24, w: 104.4, h: 34 },
-      api: { layer: 2, x: 330.4, y: 76, w: 72, h: 34 },
-      session: { layer: 3, x: 490.8, y: 24, w: 111.6, h: 34 },
+      refresh: { layer: 2, x: 334, y: 24, w: 104.4, h: 34 },
+      api: { layer: 2, x: 334, y: 76, w: 72, h: 34 },
+      session: { layer: 3, x: 494.4, y: 24, w: 111.6, h: 34 },
     });
     expect(a.layout.edges.map((e) => e.back)).toEqual([false, false, false, false]);
     expect(a.layout.edges[0]?.path).toBe('M106.8 41C134.8 41 134.8 41 162.8 41');
-    expect(a.layout.edges[1]?.path).toBe('M274.4 41C302.4 41 302.4 93 330.4 93');
+    expect(a.layout.edges[1]?.path).toBe('M274.4 41C304.2 41 304.2 93 334 93');
 
     const b = summarise(diagramOf('opt-b'));
-    expect(b.width).toBe(655.2);
+    expect(b.width).toBe(705);
     expect(b.height).toBe(174);
     expect(b.nodes).toEqual({
       timer: { layer: 0, x: 24, y: 64, w: 111.6, h: 34 },
-      refresh: { layer: 1, x: 191.6, y: 64, w: 104.4, h: 34 },
-      storage: { layer: 2, x: 352, y: 64, w: 111.6, h: 34 },
-      session: { layer: 3, x: 519.6, y: 64, w: 111.6, h: 34 },
+      refresh: { layer: 1, x: 241.4, y: 64, w: 104.4, h: 34 },
+      storage: { layer: 2, x: 401.8, y: 64, w: 111.6, h: 34 },
+      session: { layer: 3, x: 569.4, y: 64, w: 111.6, h: 34 },
       wrapper: { layer: 0, x: 24, y: 116, w: 111.6, h: 34 },
     });
     expect(b.layout.edges.map((e) => e.back)).toEqual([false, false, false, true, false]);
-    expect(b.layout.edges[3]?.path).toBe('M575.4 64C575.4 24 79.8 24 79.8 64');
-    expect(b.layout.edges[0]?.path).toBe('M135.6 81C163.6 81 163.6 81 191.6 81');
+    expect(b.layout.edges[3]?.path).toBe('M625.2 64C625.2 24 79.8 24 79.8 64');
+    expect(b.layout.edges[0]?.path).toBe('M135.6 81C188.5 81 188.5 81 241.4 81');
   });
 
   it('a cycle does not throw and marks exactly one edge back', () => {
