@@ -40,6 +40,7 @@ export interface PollMessage {
   excerpt?: string;
   proposal?: Graph;
   proposal_changes?: string[];
+  sketch_path?: string;
   at: string;
 }
 
@@ -73,7 +74,11 @@ export function detectInvocation(argv1: string, execPath: string, env: Record<st
   return `${execPath} ${resolve(argv1)}`;
 }
 
-export function pollMessage(m: Message, state: PlanState): PollMessage {
+export function pollMessage(
+  m: Message,
+  state: PlanState,
+  sketchPath?: (messageId: string) => string | null,
+): PollMessage {
   const block = m.kind === 'ask' && m.blockId !== undefined ? findBlock(state, m.blockId) : undefined;
   const threadId = m.threadId ?? m.id;
   const thread = (block?.qa ?? []).flatMap((e) =>
@@ -81,6 +86,7 @@ export function pollMessage(m: Message, state: PlanState): PollMessage {
       ? [{ question: e.question, ...(e.excerpt === undefined ? {} : { excerpt: e.excerpt }), answer: e.answer.md }]
       : [],
   );
+  const sketch = m.sketch ? sketchPath?.(m.id) : undefined;
   return {
     id: m.id,
     kind: m.kind,
@@ -96,6 +102,7 @@ export function pollMessage(m: Message, state: PlanState): PollMessage {
           proposal: m.proposal,
           proposal_changes: diffGraphs((block && blockDiagram(block)) ?? { nodes: [], edges: [] }, m.proposal),
         }),
+    ...(sketch ? { sketch_path: sketch } : {}),
     at: m.at,
   };
 }
@@ -243,7 +250,11 @@ function messageLine(inv: Invocation, id: string, m: PollMessage): string | unde
       m.proposal === undefined
         ? ''
         : ' The user attached their own version of this diagram (`proposal_changes`); have the subagent explain why it would or would not work, answer with a diagram when that helps, and patch the block only after the user agrees in the thread.';
-    return `- ${m.id} (${where}): ${route}${weigh} Then run \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`. If you cannot start subagents, answer it yourself.`;
+    const read =
+      m.sketch_path === undefined
+        ? ''
+        : ' The user drew on the diagram; pass `sketch_path` to the subagent to open with the Read tool.';
+    return `- ${m.id} (${where}): ${route}${weigh}${read} Then run \`${inv} answer ${id} --question ${m.id} --file <answer.json>\`. If you cannot start subagents, answer it yourself.`;
   }
   if (m.kind === 'choose') {
     const option = m.option_id ?? m.block_id ?? '';

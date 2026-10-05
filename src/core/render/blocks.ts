@@ -8,24 +8,24 @@ const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
 const RISK_WORDS = { low: 'Low', medium: 'Medium', high: 'High' } as const;
 const MAX_PIPS = 3;
 
-function blockShell(b: Block, inner: string, modifiers = ''): string {
+function blockShell(b: Block, planId: string, inner: string, modifiers = ''): string {
   return (
     `<section class="block block--${b.kind}${modifiers}" id="block-${attr(b.id)}" data-block="${attr(b.id)}" ` +
     `data-kind="${b.kind}" data-rev="${b.rev}" data-label="${attr(b.label)}" tabindex="0" ` +
     `data-testid="block-${attr(b.id)}">` +
     `<button type="button" class="ask-btn" data-action="ask" data-testid="ask-${attr(b.id)}">Ask</button>` +
     `${inner}` +
-    `<div class="qa" data-testid="qa-${attr(b.id)}">${renderThreads(b)}</div>` +
+    `<div class="qa" data-testid="qa-${attr(b.id)}">${renderThreads(b, planId)}</div>` +
     `</section>`
   );
 }
 
-function renderThreads(b: Block): string {
+function renderThreads(b: Block, planId: string): string {
   return Array.from(
     Map.groupBy(b.qa, (x) => x.threadId),
     ([threadId, exchanges]) => {
       const t = attr(threadId);
-      const inner = exchanges.map((x, i) => renderExchange(x, b.id, i > 0)).join('');
+      const inner = exchanges.map((x, i) => renderExchange(x, planId, b.id, i > 0)).join('');
       const reply =
         exchanges.at(-1)?.state === 'answered'
           ? `<button type="button" class="reply-btn" data-action="reply" data-thread="${t}" data-testid="reply-${t}">Reply</button>`
@@ -35,7 +35,7 @@ function renderThreads(b: Block): string {
   ).join('');
 }
 
-export function renderExchange(x: Exchange, blockId: string, followup = false): string {
+export function renderExchange(x: Exchange, planId: string, blockId: string, followup = false): string {
   const followupClass = followup ? ' exchange--followup' : '';
   const open =
     `<div class="exchange exchange--${x.state}${followupClass}" data-testid="qa-${attr(x.id)}" ` +
@@ -47,6 +47,9 @@ export function renderExchange(x: Exchange, blockId: string, followup = false): 
       : `<figure class="answer-diagram proposal" data-testid="proposal-${attr(x.id)}">` +
         `<figcaption class="eyebrow">YOUR VERSION</figcaption>` +
         `${renderGraphSvg(x.proposal, { markerId: `mk-${blockId}-${x.id}-p`, ariaLabel: 'Your version' })}</figure>`;
+  const sketch = x.sketch
+    ? `<img class="sketch" alt="Your drawing" src="/api/plans/${attr(planId)}/sketches/${attr(x.id)}.png" data-testid="sketch-${attr(x.id)}">`
+    : '';
   const question = esc(x.question);
 
   if (x.state === 'answered' && x.answer !== undefined) {
@@ -58,13 +61,13 @@ export function renderExchange(x: Exchange, blockId: string, followup = false): 
             ariaLabel: 'Answer diagram',
           })}</figure>`;
     return (
-      `${open}${excerpt}${proposal}<p class="asked-line">You asked: ${question}</p>` +
+      `${open}${excerpt}${proposal}${sketch}<p class="asked-line">You asked: ${question}</p>` +
       `<div class="answer">${renderMarkdown(x.answer.md)}</div>${diagram}</div>`
     );
   }
 
   const status = x.state === 'delivered' ? 'Delivered to the agent' : 'Asked';
-  return `${open}${excerpt}${proposal}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
+  return `${open}${excerpt}${proposal}${sketch}<p class="asked-line">You asked: ${question} · ${status}</p></div>`;
 }
 
 function renderCost({ id, cost }: OptionBlock): string {
@@ -102,7 +105,7 @@ function editButton(b: Block): string {
   return `<button type="button" class="edit-btn" data-action="edit-diagram" data-testid="edit-${attr(b.id)}">Edit diagram</button>`;
 }
 
-function renderOption(b: OptionBlock): string {
+function renderOption(b: OptionBlock, planId: string): string {
   const ribbon = b.recommended ? `<span class="ribbon">RECOMMENDED</span>` : '';
   const why = b.recommended && b.why !== undefined ? `<p class="why">${esc(b.why)}</p>` : '';
   const chips = b.reuses.map((r) => `<code class="chip">${esc(r)}</code>`).join('');
@@ -119,10 +122,10 @@ function renderOption(b: OptionBlock): string {
     `${renderCost(b)}` +
     `${why}` +
     `<footer class="choose">${renderChooseFooter(b)}</footer>`;
-  return blockShell(b, inner, b.recommended ? ' block--recommended' : '');
+  return blockShell(b, planId, inner, b.recommended ? ' block--recommended' : '');
 }
 
-function renderFindings(b: FindingsBlock): string {
+function renderFindings(b: FindingsBlock, planId: string): string {
   const diagram =
     b.diagram === undefined
       ? ''
@@ -139,20 +142,20 @@ function renderFindings(b: FindingsBlock): string {
     )
     .join('');
   const inner = `${diagram}<ul class="findings">${rows}</ul><p class="caption">${esc(b.summary)}</p>`;
-  return blockShell(b, inner);
+  return blockShell(b, planId, inner);
 }
 
-function renderVerdict(b: VerdictBlock): string {
+function renderVerdict(b: VerdictBlock, planId: string): string {
   const inner =
     `<div class="verdict">` +
     `<span class="pick-chip">Pick ${b.letter}</span>` +
     `<strong class="verdict-name">${esc(b.optionName)}</strong>` +
     `<p class="why">${esc(b.why)}</p>` +
     `</div>`;
-  return blockShell(b, inner);
+  return blockShell(b, planId, inner);
 }
 
-function renderSteps(b: StepsBlock): string {
+function renderSteps(b: StepsBlock, planId: string): string {
   const items = b.steps
     .map((step) => {
       const touches =
@@ -169,18 +172,18 @@ function renderSteps(b: StepsBlock): string {
     })
     .join('');
   const inner = `<header class="steps-head"><h3 class="steps-name">${esc(b.label)}</h3></header><ol class="rail">${items}</ol>`;
-  return blockShell(b, inner);
+  return blockShell(b, planId, inner);
 }
 
-export function renderBlock(b: Block): string {
+export function renderBlock(b: Block, planId: string): string {
   switch (b.kind) {
     case 'option':
-      return renderOption(b);
+      return renderOption(b, planId);
     case 'findings':
-      return renderFindings(b);
+      return renderFindings(b, planId);
     case 'verdict':
-      return renderVerdict(b);
+      return renderVerdict(b, planId);
     case 'steps':
-      return renderSteps(b);
+      return renderSteps(b, planId);
   }
 }

@@ -11,6 +11,7 @@
   --accent-soft: #e6e8f7;
   --hold: #b06a1f;
   --hold-soft: #f6eada;
+  --mark: #c8102e;
   --shadow: 0 1px 2px rgba(30, 35, 44, 0.06), 0 8px 24px -16px rgba(30, 35, 44, 0.28);
   --diagram-reused: var(--accent-soft);
   --diagram-new: var(--hold-soft);
@@ -34,6 +35,7 @@
     --accent-soft: #232844;
     --hold: #e0a05a;
     --hold-soft: #2e2519;
+    --mark: #ff6b81;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
   }
 }
@@ -51,6 +53,7 @@
   --accent-soft: #232844;
   --hold: #e0a05a;
   --hold-soft: #2e2519;
+  --mark: #ff6b81;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
 }
 
@@ -801,6 +804,26 @@ figure svg,
   pointer-events: none;
 }
 
+.editor-toolbar [aria-pressed="true"] {
+  border-color: var(--mark);
+  color: var(--mark);
+}
+
+.editor-canvas[data-drawing],
+.editor-canvas[data-drawing] .node {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.mark {
+  fill: none;
+  stroke: var(--mark);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 .editor-note {
   font-family: var(--sans);
   font-size: 12.5px;
@@ -1120,6 +1143,15 @@ figure svg,
 
 .proposal figcaption {
   margin-bottom: 8px;
+}
+
+.sketch {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
 }
 
 #composer {

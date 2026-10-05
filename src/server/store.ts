@@ -8,7 +8,7 @@ export class PlanStore {
   private readonly plans = new Map<string, PlanState>();
 
   constructor(
-    private readonly persistence: Persistence,
+    readonly persistence: Persistence,
     private readonly clock: () => Date,
   ) {
     for (const id of persistence.list()) {

@@ -61,8 +61,8 @@ function optionTabs(options: OptionBlock[]): string {
   );
 }
 
-function renderAll(blocks: Block[]): string {
-  return blocks.map(renderBlock).join('');
+function renderAll(blocks: Block[], planId: string): string {
+  return blocks.map((b) => renderBlock(b, planId)).join('');
 }
 
 export function renderPage(
@@ -77,14 +77,19 @@ export function renderPage(
   const options = ofKind('option');
 
   const stages =
-    stage('01', "What's already here", renderAll(ofKind('findings'))) +
+    stage('01', "What's already here", renderAll(ofKind('findings'), s.plan.id)) +
     stage(
       '02',
       WAYS_TITLE[options.length] ?? `${options.length} ways`,
-      `${optionTabs(options)}<div class="options">${renderAll(options)}</div>`,
+      `${optionTabs(options)}<div class="options">${renderAll(options, s.plan.id)}</div>`,
     ) +
-    stage('03', 'The pick', renderAll(ofKind('verdict'))) +
-    stage('04', 'Steps', `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'))}</div>`, !hasSteps);
+    stage('03', 'The pick', renderAll(ofKind('verdict'), s.plan.id)) +
+    stage(
+      '04',
+      'Steps',
+      `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'), s.plan.id)}</div>`,
+      !hasSteps,
+    );
 
   const body =
     `${header(s, opts.presence, opts.undelivered)}<main class="page" data-testid="page">${stages}` +

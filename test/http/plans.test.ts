@@ -157,7 +157,7 @@ describe('read routes', () => {
     );
     const htmlRes = await t.request(`/api/plans/auth-refresh/blocks/${block.id}.html`);
     expect(htmlRes.headers.get('content-type')).toBe('text/html; charset=utf-8');
-    expect(await blockHtml(t, 'auth-refresh', block.id)).toBe(renderBlock(block));
+    expect(await blockHtml(t, 'auth-refresh', block.id)).toBe(renderBlock(block, 'auth-refresh'));
   });
 
   test('health reports the plans, the version and whether anything is connected', async () => {

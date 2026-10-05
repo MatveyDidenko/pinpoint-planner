@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { parsePlanInput } from '../../src/core/schema';
 import { attachAnswer, openPlan, postMessage } from '../../src/core/state';
 import type { PlanState } from '../../src/core/types';
@@ -111,6 +111,23 @@ describe('filePersistence', () => {
     writeFileSync(join(dir, 'plans', 'd.json.corrupt-2026-10-03T12-34-56.789Z'), '{');
 
     expect(p.list()).toEqual(['a', 'b']);
+  });
+
+  it('saveSketch writes atomically and sketchPath is null for an unknown message', () => {
+    const p = filePersistence(relative(process.cwd(), dir), CLOCK);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7]);
+
+    p.saveSketch('p1', 'm-1', png);
+
+    const path = p.sketchPath('p1', 'm-1');
+    expect(path).toBe(join(dir, 'sketches', 'p1', 'm-1.png'));
+    expect(isAbsolute(path ?? '')).toBe(true);
+    expect(readFileSync(path ?? '')).toEqual(Buffer.from(png));
+    expect(readdirSync(join(dir, 'sketches', 'p1'))).toEqual(['m-1.png']);
+    expect(p.sketchPath('p1', 'm-2')).toBeNull();
+    expect(p.sketchPath('p2', 'm-1')).toBeNull();
+    writeFileSync(join(dir, 'sketches', 'p3'), 'a file where the directory should be');
+    expect(() => p.saveSketch('p3', 'm-1', png)).toThrow(PersistenceError);
   });
 
   it('a write failure throws PersistenceError with code IO', () => {

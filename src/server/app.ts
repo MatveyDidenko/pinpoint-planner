@@ -20,6 +20,7 @@ import { renderBlock } from '../core/render/blocks';
 import { type Assets, renderHome, renderPage } from '../core/render/page';
 import {
   type Issue,
+  PNG_DATA_URL_PREFIX,
   parseAnswerInput,
   parseBlockInput,
   parseBrowserMessage,
@@ -58,7 +59,7 @@ export interface AppDeps {
   heartbeatMs?: number;
   pollMaxWaitMs?: number;
   browserGraceMs?: number;
-  render?: (block: Block) => string;
+  render?: typeof renderBlock;
   onShutdown?: () => void;
   onActivity?: () => void;
 }
@@ -81,6 +82,8 @@ const DEFAULT_INVOCATION: Invocation = 'pinpoint';
 const FONT_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const HTML_BLOCK_SUFFIX = '.html';
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
+const PNG_SUFFIX = '.png';
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 const STATUS_BY_CODE: Partial<Record<ErrorCode, ContentfulStatusCode>> = {
   INVALID_INPUT: 400,
@@ -126,6 +129,14 @@ async function readJson(c: Context): Promise<unknown> {
   }
 }
 
+function decodeSketch(dataUrl: string): Uint8Array<ArrayBuffer> {
+  const png = Buffer.from(dataUrl.slice(PNG_DATA_URL_PREFIX.length), 'base64');
+  if (!PNG_SIGNATURE.every((byte, i) => png[i] === byte)) {
+    throw new InvalidInputError([{ path: 'sketch', message: 'sketch is not a PNG image' }]);
+  }
+  return png;
+}
+
 function acknowledgedBy(prev: PlanState, next: PlanState): string[] {
   const alreadyAcked = new Set(prev.messages.filter((m) => m.ackedAt !== undefined).map((m) => m.id));
   return next.messages.filter((m) => m.ackedAt !== undefined && !alreadyAcked.has(m.id)).map((m) => m.id);
@@ -153,11 +164,11 @@ function undeliveredCount(state: PlanState): number {
   return pendingMessages(state).filter((m) => m.deliveredAt === undefined).length;
 }
 
-function replayFrames(state: PlanState, since: number, render: (block: Block) => string): SseFrame[] {
+function replayFrames(state: PlanState, since: number, render: typeof renderBlock): SseFrame[] {
   const { blocks } = state.plan;
   return blocks.flatMap((block, index): SseFrame[] => {
     if (block.touchedAt <= since) return [];
-    const common = { blockId: block.id, rev: block.rev, html: render(block), revision: state.revision };
+    const common = { blockId: block.id, rev: block.rev, html: render(block, state.plan.id), revision: state.revision };
     if (block.kind === 'steps' && block.rev === 1) {
       return [{ event: 'appended', data: { ...common, after: blocks[index - 1]?.id ?? null } }];
     }
@@ -225,7 +236,7 @@ export function createApp(deps: AppDeps): PinpointApp {
       if (block === undefined || blockId === appended?.blockId) continue;
       sse.broadcast(planId, {
         event: 'block',
-        data: { blockId, rev: block.rev, html: render(block), revision: state.revision },
+        data: { blockId, rev: block.rev, html: render(block, planId), revision: state.revision },
       });
     }
     const added = appended === undefined ? undefined : findBlock(state, appended.blockId);
@@ -236,7 +247,7 @@ export function createApp(deps: AppDeps): PinpointApp {
           blockId: appended.blockId,
           after: appended.after,
           rev: added.rev,
-          html: render(added),
+          html: render(added, planId),
           revision: state.revision,
         },
       });
@@ -246,7 +257,8 @@ export function createApp(deps: AppDeps): PinpointApp {
 
   const applyChecked = <T extends Transition>(id: string, fn: (s: PlanState, now: string) => T): T =>
     store.apply(id, fn, (prev, { state, touched }) => {
-      if (untouchedHash(prev.plan, touched, render) !== untouchedHash(state.plan, touched, render)) {
+      const renderIn = (block: Block) => render(block, id);
+      if (untouchedHash(prev.plan, touched, renderIn) !== untouchedHash(state.plan, touched, renderIn)) {
         throw new InvariantError('An untouched block changed; the update was not saved.');
       }
     });
@@ -311,7 +323,7 @@ export function createApp(deps: AppDeps): PinpointApp {
     });
     publish(id, transition);
     const { state } = transition;
-    const messages = pending.map((m) => pollMessage(m, state));
+    const messages = pending.map((m) => pollMessage(m, state, (mid) => store.persistence.sketchPath(id, mid)));
     return pollOutput({
       status: hasDone ? 'done' : 'messages',
       planId: id,
@@ -412,22 +424,34 @@ export function createApp(deps: AppDeps): PinpointApp {
     const blockId = asHtml ? param.slice(0, -HTML_BLOCK_SUFFIX.length) : param;
     const block = findBlock(state, blockId);
     if (block === undefined) throw new StateError('NOT_FOUND', `no block ${blockId} in plan ${state.plan.id}`);
-    return asHtml ? c.body(render(block), 200, { 'Content-Type': HTML_CONTENT_TYPE }) : c.json(block);
+    return asHtml ? c.body(render(block, state.plan.id), 200, { 'Content-Type': HTML_CONTENT_TYPE }) : c.json(block);
+  });
+
+  app.get('/api/plans/:id/sketches/:file', (c) => {
+    const state = requirePlan(store, c.req.param('id'));
+    const file = c.req.param('file');
+    const messageId = file.endsWith(PNG_SUFFIX) ? file.slice(0, -PNG_SUFFIX.length) : '';
+    const sketched = state.plan.blocks.some((block) => block.qa.some((x) => x.id === messageId && x.sketch));
+    const png = sketched ? store.persistence.loadSketch(state.plan.id, messageId) : null;
+    if (png === null) throw new StateError('NOT_FOUND', `no sketch ${file} in plan ${state.plan.id}`);
+    return new Response(png, { headers: { 'Content-Type': 'image/png' } });
   });
 
   app.post('/api/plans/:id/messages', async (c) => {
     const id = c.req.param('id');
     const parsed = parseBrowserMessage(await readJson(c));
     if (!parsed.ok) throw new InvalidInputError(parsed.issues);
+    const png = parsed.value.sketch === undefined ? undefined : decodeSketch(parsed.value.sketch);
     const transition = store.apply(id, (s, now) => postMessage(s, parsed.value, now));
     const { state, message, duplicate } = transition;
+    if (png !== undefined && message.sketch) store.persistence.saveSketch(id, message.id, png);
     const touchedId = transition.touched[0];
     const touched = touchedId === undefined ? undefined : findBlock(state, touchedId);
     publish(id, transition);
     if (!duplicate) polls.wake(id, 'message');
     return c.json({
       message,
-      ...(touched === undefined ? {} : { block: { blockId: touched.id, rev: touched.rev, html: render(touched) } }),
+      ...(touched === undefined ? {} : { block: { blockId: touched.id, rev: touched.rev, html: render(touched, id) } }),
       revision: state.revision,
       duplicate,
     });

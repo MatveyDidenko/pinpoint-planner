@@ -156,6 +156,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
   const id = `m-${state.nextMessageSeq}`;
   const threadId = m.threadId ?? id;
   const proposal = m.proposal === undefined ? {} : { proposal: m.proposal };
+  const sketch = m.sketch === undefined ? {} : { sketch: true as const };
   const message: Message = {
     id,
     clientId: m.clientId,
@@ -164,6 +165,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
     text: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
     ...proposal,
+    ...sketch,
     at: now,
     threadId,
   };
@@ -173,6 +175,7 @@ function postAsk(state: PlanState, m: BrowserMessage, now: string): Transition &
     question: m.text,
     ...(m.excerpt === undefined ? {} : { excerpt: m.excerpt }),
     ...proposal,
+    ...sketch,
     askedAt: now,
     state: 'asked',
   };

@@ -38,6 +38,7 @@ Pinpoint shows your plan in the user's browser and sends their questions and cho
    - Each question thread gets its own Sonnet subagent; follow-ups go to the same one.
    - You are the only writer: subagents return the answer, you run \`answer\`.
    - Wait for this poll's subagents and write their answers before polling again.
+   - When a message carries \`proposal_changes\` or \`sketch_path\`, the subagent weighs the user's version; patch the block only after the user agrees in the thread.
    - Treat the stdout JSON as the contract.
    - \`${inv} help\` and \`next_step\` are authoritative.
 `;

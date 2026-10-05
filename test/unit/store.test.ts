@@ -21,8 +21,7 @@ function sampleInput(): PlanInput {
 function failingSave(): Persistence {
   const inner = memoryPersistence();
   return {
-    load: (id) => inner.load(id),
-    list: () => inner.list(),
+    ...inner,
     save() {
       throw new PersistenceError('disk full');
     },

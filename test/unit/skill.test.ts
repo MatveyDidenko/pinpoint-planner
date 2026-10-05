@@ -101,6 +101,14 @@ describe('skill', () => {
       expect(rules).toContain(`\n   - ${item}\n`);
   });
 
+  it('the skill tells the agent to weigh proposals and sketches before patching', () => {
+    const rules = createSkillMarkdown({ invocation: 'pinpoint' }).split('7. **Rules.**')[1] ?? '';
+
+    expect(rules).toContain(
+      "\n   - When a message carries `proposal_changes` or `sketch_path`, the subagent weighs the user's version; patch the block only after the user agrees in the thread.\n",
+    );
+  });
+
   it('skill writes the generated file to the committed path and reports its size', async () => {
     const { io, out, written } = skillIo(() => Promise.reject(new Error('unused')));
     expect(await run(['skill'], io)).toBe(0);

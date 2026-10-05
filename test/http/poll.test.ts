@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import type { PollOutput } from '../../src/core/output';
 import { pendingMessages } from '../../src/core/state';
 import type { PlanState } from '../../src/core/types';
-import { memoryPersistence, type Persistence } from '../../src/server/persistence';
+import { filePersistence, memoryPersistence, type Persistence } from '../../src/server/persistence';
 import { PlanStore } from '../../src/server/store';
 import { ask, fixedClock, makeTestApp, seedPlan, TEST_BASE_URL, type TestApp, waitFor } from '../helpers/test-app';
 
@@ -134,8 +137,7 @@ describe('GET /api/plans/:id/poll', () => {
     const events: string[] = [];
     const inner = memoryPersistence();
     const recording: Persistence = {
-      load: (id) => inner.load(id),
-      list: () => inner.list(),
+      ...inner,
       save: (id, state) => {
         events.push('save');
         inner.save(id, state);
@@ -154,6 +156,26 @@ describe('GET /api/plans/:id/poll', () => {
     await post(ask('opt-b', 'order matters'));
 
     expect(events).toEqual(['save', 'wake']);
+  });
+
+  test("a polled ask with a sketch carries the PNG's absolute path", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pinpoint-poll-sketch-'));
+    try {
+      const clock = fixedClock();
+      t = makeTestApp({ clock, store: new PlanStore(filePersistence(dir, clock), clock) });
+      await seedPlan(t);
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 5]);
+      await postedId({ ...ask('opt-b', 'like this?'), sketch: `data:image/png;base64,${png.toString('base64')}` });
+
+      const [message] = (await pollJson('timeoutMs=0')).messages;
+
+      expect(message?.sketch_path).toBe(join(dir, 'sketches', PLAN, 'm-1.png'));
+      expect(isAbsolute(message?.sketch_path ?? '')).toBe(true);
+      expect(readFileSync(message?.sketch_path ?? '')).toEqual(png);
+      expect(Object.keys(message ?? {}).slice(-2)).toEqual(['sketch_path', 'at']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('two pollers both resolve with the same message and report two pollers', async () => {

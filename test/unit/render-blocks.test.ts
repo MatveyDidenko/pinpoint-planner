@@ -23,6 +23,7 @@ function loadState(): PlanState {
 }
 
 const state = loadState();
+const PLAN = state.plan.id;
 
 function option(id: string, patch: Partial<OptionBlock> = {}): OptionBlock {
   return { ...(findBlock(state, id) as OptionBlock), ...patch };
@@ -31,7 +32,7 @@ function option(id: string, patch: Partial<OptionBlock> = {}): OptionBlock {
 describe('renderBlock option', () => {
   it('option block carries the block contract attributes and its data-testids', () => {
     const b = option('opt-b');
-    const html = renderBlock(b);
+    const html = renderBlock(b, PLAN);
 
     expect(html).toStartWith('<section class="block block--option"');
     expect(html).toContain('id="block-opt-b"');
@@ -55,7 +56,7 @@ describe('renderBlock option', () => {
   });
 
   it('escapes agent strings in attributes and text', () => {
-    const html = renderBlock(option('opt-b', { name: '<b>"x"</b>', label: 'Way B · <b>"x"</b>' }));
+    const html = renderBlock(option('opt-b', { name: '<b>"x"</b>', label: 'Way B · <b>"x"</b>' }), PLAN);
 
     expect(html).not.toContain('<b>"x"</b>');
     expect(html).toContain('data-label="Way B · &lt;b&gt;&quot;x&quot;&lt;/b&gt;"');
@@ -65,31 +66,31 @@ describe('renderBlock option', () => {
     const recommended = option('opt-a');
     const other = option('opt-b');
 
-    const withRibbon = renderBlock(recommended);
+    const withRibbon = renderBlock(recommended, PLAN);
     expect(withRibbon).toContain('RECOMMENDED');
     expect(withRibbon).toContain(recommended.why as string);
     expect(withRibbon).toContain('block--recommended');
 
-    const without = renderBlock(other);
+    const without = renderBlock(other, PLAN);
     expect(without).not.toContain('RECOMMENDED');
     expect(without).not.toContain('class="why"');
     expect(without).not.toContain('block--recommended');
   });
 
   it('choose footer renders button, disabled notice or steps link by steps.state', () => {
-    const none = renderBlock(option('opt-b'));
+    const none = renderBlock(option('opt-b'), PLAN);
     expect(none).toMatch(/<button(?![^>]*disabled)[^>]*data-action="choose"[^>]*data-testid="choose-opt-b"/);
     expect(none).not.toContain('Steps requested');
     expect(none).not.toContain('steps-link-opt-b');
 
-    const requested = renderBlock(option('opt-b', { steps: { state: 'requested' } }));
+    const requested = renderBlock(option('opt-b', { steps: { state: 'requested' } }), PLAN);
     expect(requested).toMatch(
       /<button[^>]*disabled[^>]*data-testid="choose-opt-b"|<button[^>]*data-testid="choose-opt-b"[^>]*disabled/,
     );
     expect(requested).toContain('Steps requested · waiting for the agent');
     expect(requested).not.toContain('steps-link-opt-b');
 
-    const ready = renderBlock(option('opt-b', { steps: { state: 'ready', blockId: 'steps-opt-b' } }));
+    const ready = renderBlock(option('opt-b', { steps: { state: 'ready', blockId: 'steps-opt-b' } }), PLAN);
     expect(ready).toContain('href="#block-steps-opt-b"');
     expect(ready).toContain('data-testid="steps-link-opt-b"');
     expect(ready).toContain('Steps ready ↓');
@@ -97,8 +98,8 @@ describe('renderBlock option', () => {
   });
 
   it('cost spells out effort and risk in words', () => {
-    const medium = renderBlock(option('opt-b'));
-    const small = renderBlock(option('opt-a'));
+    const medium = renderBlock(option('opt-b'), PLAN);
+    const small = renderBlock(option('opt-a'), PLAN);
 
     expect(medium).toContain('<span class="cost-label" data-testid="cost-opt-b">Medium effort · Medium risk</span>');
     expect(small).toContain('<span class="cost-label" data-testid="cost-opt-a">Small effort · Low risk</span>');
@@ -111,14 +112,14 @@ describe('renderBlock option', () => {
   it('a high-risk large option reads Large effort · High risk', () => {
     const b = option('opt-c', { cost: { ...option('opt-c').cost, effort: 'L', risk: 'high' } });
 
-    expect(renderBlock(b)).toContain('data-testid="cost-opt-c">Large effort · High risk</span>');
+    expect(renderBlock(b, PLAN)).toContain('data-testid="cost-opt-c">Large effort · High risk</span>');
   });
 
   it('renderBlock is deterministic', () => {
     const b = option('opt-a');
 
-    expect(renderBlock(b)).toBe(renderBlock(b));
-    expect(renderBlock(b)).toMatchSnapshot();
+    expect(renderBlock(b, PLAN)).toBe(renderBlock(b, PLAN));
+    expect(renderBlock(b, PLAN)).toMatchSnapshot();
   });
 });
 
@@ -129,7 +130,7 @@ function verdict(s: PlanState = state): VerdictBlock {
 describe('renderBlock verdict', () => {
   it('verdict names the recommended letter and its why', () => {
     const b = verdict();
-    const html = renderBlock(b);
+    const html = renderBlock(b, PLAN);
 
     expect(html).toStartWith('<section class="block block--verdict"');
     expect(html).toContain('data-kind="verdict"');
@@ -148,7 +149,7 @@ describe('renderBlock verdict', () => {
       { kind: 'verdict', why: '<img src=x onerror=alert(1)>' },
       '2026-10-03T10:01:00.000Z',
     ).state;
-    const html = renderBlock(verdict(patched));
+    const html = renderBlock(verdict(patched), PLAN);
 
     expect(html).not.toContain('<img');
     expect(html).toContain('<p class="why">&lt;img src=x onerror=alert(1)&gt;</p>');
@@ -162,7 +163,7 @@ function findings(patch: Partial<FindingsBlock> = {}): FindingsBlock {
 describe('renderBlock findings', () => {
   it('findings block lists every item with its role tag and path', () => {
     const b = findings();
-    const html = renderBlock(b);
+    const html = renderBlock(b, PLAN);
 
     expect(html).toStartWith('<section class="block block--findings"');
     expect(html).toContain('data-kind="findings"');
@@ -182,7 +183,7 @@ describe('renderBlock findings', () => {
 
   it('findings without a diagram renders no svg and no legend', () => {
     const { diagram: _diagram, ...rest } = findings();
-    const html = renderBlock(rest);
+    const html = renderBlock(rest, PLAN);
 
     expect(html).not.toContain('<svg');
     expect(html).not.toContain('class="legend"');
@@ -193,6 +194,7 @@ describe('renderBlock findings', () => {
   it('escapes agent strings in findings rows and summary', () => {
     const html = renderBlock(
       findings({ summary: '<i>s</i>', items: [{ path: '<a>.ts', role: 'reuse', note: '"n" & <b>' }] }),
+      PLAN,
     );
 
     expect(html).not.toContain('<a>.ts');
@@ -228,7 +230,7 @@ function exchangeOf(s: PlanState): Exchange {
 describe('renderExchange', () => {
   it('exchange renders asked, delivered and answered states with the question and excerpt', () => {
     const asked = askedState();
-    const askedHtml = renderExchange(exchangeOf(asked), 'opt-b');
+    const askedHtml = renderExchange(exchangeOf(asked), PLAN, 'opt-b');
     expect(askedHtml).toContain('data-testid="qa-m-1"');
     expect(askedHtml).toContain('data-state="asked"');
     expect(askedHtml).toContain('You asked: Why a &lt;timer&gt;? · Asked');
@@ -236,26 +238,26 @@ describe('renderExchange', () => {
     expect(askedHtml).not.toContain('class="answer"');
 
     const delivered = markDelivered(asked, ['m-1'], ASKED_AT).state;
-    const deliveredHtml = renderExchange(exchangeOf(delivered), 'opt-b');
+    const deliveredHtml = renderExchange(exchangeOf(delivered), PLAN, 'opt-b');
     expect(deliveredHtml).toContain('data-state="delivered"');
     expect(deliveredHtml).toContain('You asked: Why a &lt;timer&gt;? · Delivered to the agent');
 
     const answered = attachAnswer(delivered, answerFixture(), ASKED_AT).state;
-    const answeredHtml = renderExchange(exchangeOf(answered), 'opt-b');
+    const answeredHtml = renderExchange(exchangeOf(answered), PLAN, 'opt-b');
     expect(answeredHtml).toContain('data-state="answered"');
     expect(answeredHtml).toContain('Why a &lt;timer&gt;?');
     expect(answeredHtml).toContain('<strong>sleeping laptop</strong>');
     expect(answeredHtml).toContain('<blockquote class="excerpt">Background &quot;renewal&quot;</blockquote>');
     expect(answeredHtml).not.toContain('· Asked');
 
-    const blockHtml = renderBlock(findBlock(answered, 'opt-b') as OptionBlock);
+    const blockHtml = renderBlock(findBlock(answered, 'opt-b') as OptionBlock, PLAN);
     expect(blockHtml).toContain('data-testid="qa-m-1"');
     expect(blockHtml).toContain('data-testid="qa-opt-b"');
   });
 
   it('an answered exchange with a diagram uses a marker id scoped to the exchange', () => {
     const answered = attachAnswer(askedState(), answerFixture(), ASKED_AT).state;
-    const html = renderExchange(exchangeOf(answered), 'opt-b');
+    const html = renderExchange(exchangeOf(answered), PLAN, 'opt-b');
 
     expect(html).toContain('<figure class="answer-diagram">');
     expect(html).toContain('id="mk-opt-b-m-1"');
@@ -267,7 +269,7 @@ describe('renderExchange', () => {
       state: 'answered',
       answer: { md: 'Short answer.', at: ASKED_AT },
     };
-    expect(renderExchange(withoutDiagram, 'opt-b')).not.toContain('<figure');
+    expect(renderExchange(withoutDiagram, PLAN, 'opt-b')).not.toContain('<figure');
   });
 
   const proposal: Graph = {
@@ -292,7 +294,7 @@ describe('renderExchange', () => {
     const answered = attachAnswer(delivered, { questionId: 'm-1', md: 'It would work.' }, ASKED_AT).state;
 
     for (const s of [asked, delivered, answered]) {
-      const html = renderExchange(exchangeOf(s), 'opt-b');
+      const html = renderExchange(exchangeOf(s), PLAN, 'opt-b');
       expect(html).toContain(
         '<figure class="answer-diagram proposal" data-testid="proposal-m-1"><figcaption class="eyebrow">YOUR VERSION</figcaption><svg ',
       );
@@ -300,17 +302,45 @@ describe('renderExchange', () => {
       expect(html).toContain('data-node-label="Cache"');
       expect(html.indexOf('data-testid="proposal-m-1"')).toBeLessThan(html.indexOf('You asked:'));
     }
-    expect(renderExchange(exchangeOf(askedState()), 'opt-b')).not.toContain('proposal');
+    expect(renderExchange(exchangeOf(askedState()), PLAN, 'opt-b')).not.toContain('proposal');
   });
 
   it('an answered exchange with a proposal and an answer diagram uses two distinct marker ids', () => {
     const answered = attachAnswer(askedWithProposal(), answerFixture(), ASKED_AT).state;
-    const html = renderExchange(exchangeOf(answered), 'opt-b');
+    const html = renderExchange(exchangeOf(answered), PLAN, 'opt-b');
 
     expect(html.match(/<marker id="mk-opt-b-m-1-p"/g)).toHaveLength(1);
     expect(html.match(/<marker id="mk-opt-b-m-1"/g)).toHaveLength(1);
     expect(html.match(/marker-end="url\(#mk-opt-b-m-1-p\)"/g)).toHaveLength(proposal.edges.length);
     expect(html.match(/marker-end="url\(#mk-opt-b-m-1\)"/g)).toHaveLength(answerFixture().diagram?.edges.length ?? -1);
+  });
+
+  function askedWithSketch(): PlanState {
+    const sketch = 'data:image/png;base64,iVBORw0KGgo=';
+    return postMessage(
+      state,
+      { clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'Like this?', sketch },
+      ASKED_AT,
+    ).state;
+  }
+
+  it('an exchange with a sketch renders the image before the question', () => {
+    const img =
+      '<img class="sketch" alt="Your drawing" src="/api/plans/auth-refresh/sketches/m-1.png" data-testid="sketch-m-1">';
+    const asked = askedWithSketch();
+    const answered = attachAnswer(asked, { questionId: 'm-1', md: 'It would work.' }, ASKED_AT).state;
+
+    for (const s of [asked, answered]) {
+      const html = renderExchange(exchangeOf(s), PLAN, 'opt-b');
+      expect(html).toContain(img);
+      expect(html.indexOf(img)).toBeLessThan(html.indexOf('You asked:'));
+    }
+    expect(renderBlock(findBlock(asked, 'opt-b') as OptionBlock, PLAN)).toContain(img);
+  });
+
+  it('an exchange without a sketch renders no img', () => {
+    expect(renderExchange(exchangeOf(askedState()), PLAN, 'opt-b')).not.toContain('<img');
+    expect(renderBlock(findBlock(askedState(), 'opt-b') as OptionBlock, PLAN)).not.toContain('<img');
   });
 });
 
@@ -324,7 +354,7 @@ function answer(s: PlanState, questionId: string): PlanState {
 }
 
 function optB(s: PlanState): string {
-  return renderBlock(findBlock(s, 'opt-b') as OptionBlock);
+  return renderBlock(findBlock(s, 'opt-b') as OptionBlock, PLAN);
 }
 
 describe('renderBlock threads', () => {
@@ -401,7 +431,7 @@ function stepsBlock(patch: Partial<StepsBlock> = {}): StepsBlock {
 describe('renderBlock steps', () => {
   it('steps block numbers every step and lists its touches', () => {
     const b = stepsBlock();
-    const html = renderBlock(b);
+    const html = renderBlock(b, PLAN);
 
     expect(html).toStartWith('<section class="block block--steps"');
     expect(html).toContain('id="block-steps-opt-a"');
@@ -427,7 +457,7 @@ describe('renderBlock steps', () => {
     const base = stepsBlock();
     const [first, ...rest] = base.steps;
     if (first === undefined) throw new Error('fixture has no steps');
-    const html = renderBlock({ ...base, steps: [{ ...first, touches: [] }, ...rest] });
+    const html = renderBlock({ ...base, steps: [{ ...first, touches: [] }, ...rest] }, PLAN);
 
     expect(html.match(/<li class="step">/g)?.length).toBe(base.steps.length);
     expect(html.match(/<div class="touches">/g)?.length).toBe(base.steps.length - 1);
@@ -437,10 +467,13 @@ describe('renderBlock steps', () => {
 
   it('escapes agent strings in the steps rail', () => {
     const base = stepsBlock();
-    const html = renderBlock({
-      ...base,
-      steps: [{ title: '<b>t</b>', touches: ['<i>f</i>.ts'], test: '"q" & <u>x</u>' }],
-    });
+    const html = renderBlock(
+      {
+        ...base,
+        steps: [{ title: '<b>t</b>', touches: ['<i>f</i>.ts'], test: '"q" & <u>x</u>' }],
+      },
+      PLAN,
+    );
 
     expect(html).not.toContain('<b>t</b>');
     expect(html).not.toContain('<i>f</i>');

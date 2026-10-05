@@ -91,7 +91,7 @@ describe('agent mutation receipts', () => {
 
   test('a renderer made nondeterministic through deps yields 500 INVARIANT_VIOLATION and leaves the stored state unchanged', async () => {
     let counter = 0;
-    t = makeTestApp({ render: (block) => renderBlock(block) + counter++ });
+    t = makeTestApp({ render: (block, planId) => renderBlock(block, planId) + counter++ });
     await seedPlan(t);
     const questionId = await askQuestion('opt-b', 'what happens when the laptop sleeps?');
     const stored = structuredClone(t.store.get(PLAN));

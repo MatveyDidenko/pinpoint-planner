@@ -9,6 +9,7 @@ export interface Exchange {
   question: string;
   excerpt?: string;
   proposal?: Graph;
+  sketch?: true;
   askedAt: string;
   state: 'asked' | 'delivered' | 'answered';
   answer?: { md: string; diagram?: Graph; at: string };
@@ -71,6 +72,7 @@ export interface Message {
   text: string;
   excerpt?: string;
   proposal?: Graph;
+  sketch?: true;
   at: string;
   deliveredAt?: string;
   ackedAt?: string;

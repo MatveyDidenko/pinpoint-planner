@@ -22,6 +22,8 @@ export const DIAGRAM_CHANGED_EVENT = 'pinpoint:diagram-changed';
 
 type Selection = { kind: 'node'; id: string } | { kind: 'edge'; from: string; to: string };
 
+type Stroke = [number, number][];
+
 type Editor = {
   blockId: string;
   figure: Element;
@@ -31,6 +33,8 @@ type Editor = {
   graph: EditGraph;
   selected: Selection | null;
   connectFrom: string | null;
+  strokes: Stroke[];
+  drawing: boolean;
 };
 
 const TOOLBAR =
@@ -39,6 +43,9 @@ const TOOLBAR =
   `<button type="button" data-testid="status-selected" disabled>Status</button>` +
   `<button type="button" data-testid="delete-selected" disabled>Delete</button>` +
   `<button type="button" data-testid="reset-diagram">Reset</button>` +
+  `<button type="button" data-testid="draw" aria-pressed="false">Draw</button>` +
+  `<button type="button" data-testid="undo-stroke" aria-label="Undo last stroke" disabled>Undo</button>` +
+  `<button type="button" data-testid="clear-strokes" aria-label="Clear drawing" disabled>Clear</button>` +
   `<span class="editor-note" data-testid="editor-note" aria-live="polite"></span>` +
   `<button type="button" class="editor-ask" data-action="ask-version" data-testid="ask-version">Ask about my version</button>` +
   `<button type="button" data-testid="done-editing">Done editing</button>` +
@@ -49,6 +56,22 @@ const HANDLE_R = 6;
 const STEP_PX = 8;
 const BIG_STEP_PX = 32;
 const DRAG_THRESHOLD_PX = 3;
+const POINT_LIMIT = 200;
+const STROKE_LIMIT = 50;
+const SKETCH_SCALE = 2;
+const SKETCH_MARGIN = 4;
+const INLINED_STYLES = [
+  'fill',
+  'stroke',
+  'stroke-width',
+  'stroke-dasharray',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'paint-order',
+  'font-family',
+  'font-size',
+  'font-weight',
+];
 const ARROW_STEPS: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
@@ -147,6 +170,15 @@ function addHitTargets(editor: Editor): void {
   }
 }
 
+const pointsOf = (stroke: Stroke) => stroke.map(([x, y]) => `${x},${y}`).join(' ');
+
+function markEl(stroke: Stroke): SVGPolylineElement {
+  const line = document.createElementNS(SVG_NS, 'polyline');
+  line.setAttribute('class', 'mark');
+  line.setAttribute('points', pointsOf(stroke));
+  return line;
+}
+
 function sync(editor: Editor): void {
   for (const el of Array.from(editor.canvas.querySelectorAll('[data-selected]'))) el.removeAttribute('data-selected');
   const sel = editor.selected;
@@ -162,10 +194,18 @@ function sync(editor: Editor): void {
   if (del !== null) del.disabled = sel === null;
   const status = toolbarButton(editor, 'status-selected');
   if (status !== null) status.disabled = sel?.kind !== 'node';
+  toolbarButton(editor, 'draw')?.setAttribute('aria-pressed', String(editor.drawing));
+  editor.canvas.toggleAttribute('data-drawing', editor.drawing);
+  for (const testId of ['undo-stroke', 'clear-strokes']) {
+    const button = toolbarButton(editor, testId);
+    if (button !== null) button.disabled = editor.strokes.length === 0;
+  }
   const note = editor.root.querySelector('[data-testid="editor-note"]');
   if (note === null) return;
   if (editor.connectFrom !== null) {
     note.textContent = `Connecting from ${labelOf(editor, editor.connectFrom)}: focus a box and press Enter, or Esc to cancel`;
+  } else if (editor.drawing && editor.strokes.length >= STROKE_LIMIT) {
+    note.textContent = `Drawings hold at most ${STROKE_LIMIT} strokes`;
   } else {
     note.textContent = editor.graph.edges.length >= EDGE_LIMIT ? `Diagrams hold at most ${EDGE_LIMIT} arrows` : '';
   }
@@ -181,6 +221,7 @@ function render(editor: Editor): void {
   editor.canvas.querySelector('svg')?.remove();
   editor.canvas.insertAdjacentHTML('afterbegin', renderEditableSvg(editor.graph, `mk-edit-${editor.blockId}`));
   addHitTargets(editor);
+  editor.canvas.querySelector('svg')?.append(...editor.strokes.map(markEl));
   if (focused !== null) focusTarget(editor, focused)?.focus();
   sync(editor);
 }
@@ -303,6 +344,40 @@ function startDrag(editor: Editor, event: PointerEvent): void {
   document.addEventListener('pointercancel', end);
 }
 
+function strokesChanged(editor: Editor): void {
+  render(editor);
+  document.dispatchEvent(new CustomEvent(DIAGRAM_CHANGED_EVENT));
+}
+
+function startStroke(editor: Editor, event: PointerEvent): void {
+  const svg = editor.canvas.querySelector('svg');
+  if (event.button !== 0 || svg === null || editor.strokes.length >= STROKE_LIMIT) return;
+  event.preventDefault();
+  const frame = svg.getBoundingClientRect();
+  const stroke: Stroke = [];
+  const line = markEl(stroke);
+  const add = (e: PointerEvent) => {
+    const x = round1(e.clientX - frame.left);
+    const y = round1(e.clientY - frame.top);
+    const last = stroke.at(-1);
+    if (stroke.length >= POINT_LIMIT || (last?.[0] === x && last[1] === y)) return;
+    stroke.push([x, y]);
+    line.setAttribute('points', pointsOf(stroke));
+  };
+  add(event);
+  svg.append(line);
+  const end = () => {
+    document.removeEventListener('pointermove', add);
+    document.removeEventListener('pointerup', end);
+    document.removeEventListener('pointercancel', end);
+    if (stroke.length > 1) editor.strokes.push(stroke);
+    strokesChanged(editor);
+  };
+  document.addEventListener('pointermove', add);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+}
+
 function onKey(editor: Editor, event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault();
@@ -356,7 +431,7 @@ function close(restoreFocus: boolean): void {
   if (restoreFocus) figure.querySelector<HTMLElement>('[data-action="edit-diagram"]')?.focus();
 }
 
-function open(figure: Element, kept?: EditGraph): void {
+function open(figure: Element, kept?: Editor): void {
   const blockId = figure.closest<HTMLElement>('[data-block]')?.dataset.block;
   const svg = figure.querySelector('svg');
   if (blockId === undefined || svg === null) return;
@@ -373,8 +448,19 @@ function open(figure: Element, kept?: EditGraph): void {
   if (canvas === null) return;
 
   const snapshot = readGraph(svg);
-  const graph = kept ?? loadDiagram(planId, blockId) ?? snapshot;
-  const editor: Editor = { blockId, figure, root, canvas, snapshot, graph, selected: null, connectFrom: null };
+  const graph = kept?.graph ?? loadDiagram(planId, blockId) ?? snapshot;
+  const editor: Editor = {
+    blockId,
+    figure,
+    root,
+    canvas,
+    snapshot,
+    graph,
+    selected: null,
+    connectFrom: null,
+    strokes: kept?.strokes ?? [],
+    drawing: kept?.drawing ?? false,
+  };
   active = editor;
   render(editor);
   figure.replaceWith(root);
@@ -389,6 +475,19 @@ function open(figure: Element, kept?: EditGraph): void {
     commit(editor, editor.snapshot);
     clearDiagram(planId, blockId);
     sync(editor);
+  });
+  onClick('draw', () => {
+    editor.drawing = !editor.drawing;
+    editor.connectFrom = null;
+    sync(editor);
+  });
+  onClick('undo-stroke', () => {
+    editor.strokes.pop();
+    strokesChanged(editor);
+  });
+  onClick('clear-strokes', () => {
+    editor.strokes = [];
+    strokesChanged(editor);
   });
   onClick('status-selected', () => {
     if (editor.selected?.kind === 'node') commit(editor, cycleStatus(editor.graph, editor.selected.id));
@@ -406,6 +505,10 @@ function open(figure: Element, kept?: EditGraph): void {
     if (sel !== null) select(editor, sel);
   });
   canvas.addEventListener('pointerdown', (event) => {
+    if (editor.drawing) {
+      startStroke(editor, event);
+      return;
+    }
     if (event.target === canvas || event.target instanceof SVGSVGElement) select(editor, null);
     const from =
       event.target instanceof Element ? event.target.closest('[data-handle]')?.getAttribute('data-handle') : null;
@@ -414,7 +517,7 @@ function open(figure: Element, kept?: EditGraph): void {
   });
   canvas.addEventListener('dblclick', (event) => {
     const id = nodeIdOf(event.target);
-    if (id !== null) startRename(editor, id);
+    if (id !== null && !editor.drawing) startRename(editor, id);
   });
   // A reopen after a live swap takes focus only when the swap dropped it, so a composer keeps its caret.
   if (kept === undefined || document.activeElement === document.body) root.focus();
@@ -429,6 +532,53 @@ export function editedProposal(blockId: string): { proposal: Graph; changes: num
   };
   const changes = diffGraphs(active.snapshot, proposal).length;
   return changes === 0 ? null : { proposal, changes };
+}
+
+export function hasSketch(blockId: string): boolean {
+  return active?.blockId === blockId && active.strokes.length > 0;
+}
+
+function sketchSvg(editor: Editor, svg: SVGSVGElement): { markup: string; width: number; height: number } {
+  const clone = svg.cloneNode(true);
+  if (!(clone instanceof SVGSVGElement)) throw new Error('the diagram could not be copied');
+  const copies = [clone, ...Array.from(clone.querySelectorAll('*'))];
+  [svg, ...Array.from(svg.querySelectorAll('*'))].forEach((el, i) => {
+    const computed = getComputedStyle(el);
+    copies[i]?.setAttribute('style', INLINED_STYLES.map((p) => `${p}:${computed.getPropertyValue(p)}`).join(';'));
+  });
+  for (const el of Array.from(clone.querySelectorAll('.handle, .edge-hit, .connect-preview'))) el.remove();
+
+  const points = editor.strokes.flat();
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const left = Math.min(0, ...xs.map((x) => x - SKETCH_MARGIN));
+  const top = Math.min(0, ...ys.map((y) => y - SKETCH_MARGIN));
+  const width = Math.max(numberAttr(svg, 'width'), ...xs.map((x) => x + SKETCH_MARGIN)) - left;
+  const height = Math.max(numberAttr(svg, 'height'), ...ys.map((y) => y + SKETCH_MARGIN)) - top;
+  clone.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+  return { markup: new XMLSerializer().serializeToString(clone), width, height };
+}
+
+/** Draws the edited diagram and its strokes, with page styles inlined, into a PNG data URL at twice its size; null without strokes. */
+export async function editedSketch(blockId: string): Promise<string | null> {
+  const editor = active;
+  const svg = hasSketch(blockId) ? editor?.canvas.querySelector('svg') : null;
+  if (!editor || !svg) return null;
+  const { markup, width, height } = sketchSvg(editor, svg);
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * SKETCH_SCALE);
+  canvas.height = Math.ceil(height * SKETCH_SCALE);
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return null;
+  ctx.fillStyle = getComputedStyle(editor.canvas).backgroundColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
 }
 
 export function finishProposal(blockId: string): void {
@@ -448,6 +598,6 @@ export function initDiagramEditor(forPlan: string): void {
     const { blockId } = (event as CustomEvent<{ blockId: string }>).detail;
     if (active === null || active.blockId !== blockId || active.root.isConnected) return;
     const figure = document.querySelector(`[data-block="${CSS.escape(blockId)}"] figure.diagram`);
-    if (figure !== null) open(figure, active.graph);
+    if (figure !== null) open(figure, active);
   });
 }

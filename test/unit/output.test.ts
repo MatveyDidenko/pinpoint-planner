@@ -195,6 +195,25 @@ describe('pollMessage', () => {
     }
   });
 
+  it('an ask without a sketch has no sketch_path', () => {
+    const lookup = () => '/state/sketches/auth-refresh/m-1.png';
+    const plain = postMessage(
+      loadState(),
+      { clientId: 'client-aaaa', kind: 'ask', blockId: 'opt-b', text: 'plain?' },
+      NOW,
+    );
+    const sketch = 'data:image/png;base64,iVBORw0KGgo=';
+    const drawn = postMessage(
+      loadState(),
+      { clientId: 'client-bbbb', kind: 'ask', blockId: 'opt-b', text: 'drawn?', sketch },
+      NOW,
+    );
+
+    expect(pollMessage(plain.message, plain.state, lookup)).not.toHaveProperty('sketch_path');
+    expect(pollMessage(drawn.message, drawn.state, () => null)).not.toHaveProperty('sketch_path');
+    expect(pollMessage(drawn.message, drawn.state)).not.toHaveProperty('sketch_path');
+  });
+
   it('choose and done poll messages carry no thread keys', () => {
     const { choose } = withMessages();
     const done = postMessage(loadState(), { clientId: 'client-cccc', kind: 'done', text: '' }, NOW);
@@ -324,6 +343,20 @@ describe('next_step templates', () => {
       `- m-3 (Way B): send it to thread m-1's subagent with SendMessage. If that subagent is gone, start one with \`thread\`. ${weigh} Then run \`pinpoint answer auth-refresh --question m-3 --file <answer.json>\`. If you cannot start subagents, answer it yourself.`,
     );
     expect(nextStepForMessages(INV, ID, [ask], 1)).not.toContain('proposal_changes');
+  });
+
+  it('an ask with a sketch tells the subagent to read the image', () => {
+    const read = 'The user drew on the diagram; pass `sketch_path` to the subagent to open with the Read tool.';
+    const { ask } = withMessages();
+    const drawn: PollMessage = { ...ask, sketch_path: '/state/sketches/auth-refresh/m-1.png' };
+    const proposal: Graph = { nodes: [{ id: 'cache', label: 'Cache', status: 'new' }], edges: [] };
+    const both: PollMessage = { ...drawn, proposal, proposal_changes: ['added box Cache (new)'] };
+
+    expect(nextStepForMessages(INV, ID, [drawn], 1).split('\n')[1]).toBe(
+      NEW_THREAD_LINE.replace(' Then run', ` ${read} Then run`),
+    );
+    expect(nextStepForMessages(INV, ID, [both], 1)).toContain(`after the user agrees in the thread. ${read} Then run`);
+    expect(nextStepForMessages(INV, ID, [ask], 1)).not.toContain('sketch_path');
   });
 
   it('done template names the chosen ways and the unanswered questions', () => {

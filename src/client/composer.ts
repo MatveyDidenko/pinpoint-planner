@@ -1,5 +1,5 @@
 import type { BrowserMessage } from '../core/schema';
-import { DIAGRAM_CHANGED_EVENT, editedProposal, finishProposal } from './diagram-editor';
+import { DIAGRAM_CHANGED_EVENT, editedProposal, editedSketch, finishProposal, hasSketch } from './diagram-editor';
 import { clearDraft, loadDraft, saveDraft } from './draft';
 import { postMessage, UNREACHABLE_MESSAGE } from './messages';
 import { SWAPPED_EVENT } from './patch';
@@ -68,14 +68,19 @@ export function initComposer(planId: string): void {
   };
 
   const showVersion = () => {
-    const edited =
-      openBlockId !== null && openThreadId === null && versionBlockId === openBlockId
-        ? editedProposal(openBlockId)
-        : null;
-    versionChip.hidden = edited === null;
+    const versionId =
+      openBlockId !== null && openThreadId === null && versionBlockId === openBlockId ? openBlockId : null;
+    const edited = versionId === null ? null : editedProposal(versionId);
+    const drawn = versionId !== null && hasSketch(versionId);
+    const changes = edited === null ? '' : ` · ${edited.changes} change${edited.changes === 1 ? '' : 's'}`;
+    versionChip.hidden = edited === null && !drawn;
     versionChip.textContent =
-      edited === null ? '' : `With your edited diagram · ${edited.changes} change${edited.changes === 1 ? '' : 's'}`;
-    return edited;
+      edited === null
+        ? drawn
+          ? 'With your drawing'
+          : ''
+        : `With your edited diagram${drawn ? ' and drawing' : ''}${changes}`;
+    return { edited, drawn };
   };
 
   const showExcerpt = (text: string | undefined) => {
@@ -123,22 +128,26 @@ export function initComposer(planId: string): void {
     const draft = draftId();
     const blockId = openBlockId;
     if (text === '' || blockId === null || draft === null || sending) return;
-    const edited = showVersion();
-    const message: BrowserMessage = {
-      clientId: crypto.randomUUID(),
-      kind: 'ask',
-      blockId,
-      text,
-      ...(excerpt === undefined ? {} : { excerpt }),
-      ...(openThreadId === null ? {} : { threadId: openThreadId }),
-      ...(edited === null ? {} : { proposal: edited.proposal }),
-    };
+    const { edited, drawn } = showVersion();
+    const threadId = openThreadId;
+    const quoted = excerpt;
     sending = true;
     sendButton.disabled = true;
     try {
+      const sketch = drawn ? await editedSketch(blockId) : null;
+      const message: BrowserMessage = {
+        clientId: crypto.randomUUID(),
+        kind: 'ask',
+        blockId,
+        text,
+        ...(quoted === undefined ? {} : { excerpt: quoted }),
+        ...(threadId === null ? {} : { threadId }),
+        ...(edited === null ? {} : { proposal: edited.proposal }),
+        ...(sketch === null ? {} : { sketch }),
+      };
       await postMessage(planId, message);
       clearDraft(planId, draft);
-      if (edited !== null) finishProposal(blockId);
+      if (edited !== null || sketch !== null) finishProposal(blockId);
       clearSelection();
     } catch (error) {
       hint.textContent = error instanceof Error ? error.message : UNREACHABLE_MESSAGE;

@@ -14,6 +14,8 @@ export const MAX_EDGES = 12;
 export const MAX_FINDINGS = 12;
 export const MAX_STEPS = 12;
 export const MAX_EXCHANGES = 40;
+export const SKETCH_MAX = 700_000;
+export const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 
 const sentence = z.string().min(1).max(SENTENCE_MAX);
 
@@ -157,6 +159,7 @@ export const BrowserMessageSchema = z
     text: z.string().max(ANSWER_MAX),
     excerpt: z.string().max(EXCERPT_MAX).optional(),
     proposal: GraphSchema.optional(),
+    sketch: z.string().startsWith(PNG_DATA_URL_PREFIX).max(SKETCH_MAX).optional(),
   })
   .superRefine((message, ctx) => {
     if (message.kind === 'ask') {
@@ -173,6 +176,9 @@ export const BrowserMessageSchema = z
     }
     if (message.proposal !== undefined) {
       ctx.addIssue({ code: 'custom', path: ['proposal'], message: `${message.kind} takes no proposal` });
+    }
+    if (message.sketch !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['sketch'], message: `${message.kind} takes no sketch` });
     }
     if (message.text !== '') ctx.addIssue({ code: 'custom', path: ['text'], message: `${message.kind} takes no text` });
   });

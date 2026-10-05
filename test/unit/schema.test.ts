@@ -112,4 +112,29 @@ describe('schema', () => {
     ]);
     expect(issuePaths(parseBrowserMessage({ ...base, kind: 'done', text: '' }))).toEqual(['proposal']);
   });
+
+  const PNG_PREFIX = 'data:image/png;base64,';
+
+  it('an ask with a PNG data URL sketch parses', () => {
+    const sketch = `${PNG_PREFIX}iVBORw0KGgo=`;
+    const result = parseBrowserMessage({ clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'This?', sketch });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.sketch).toBe(sketch);
+  });
+
+  it('a sketch that is not a PNG data URL or is over the cap fails', () => {
+    const asking = { clientId: 'client-01', kind: 'ask', blockId: 'opt-b', text: 'This?' };
+    const sketchIssues = (sketch: string, over: Record<string, unknown> = asking) =>
+      issuePaths(parseBrowserMessage({ ...over, sketch }));
+
+    expect(sketchIssues('data:image/jpeg;base64,/9j/4AAQ')).toEqual(['sketch']);
+    expect(sketchIssues('iVBORw0KGgo=')).toEqual(['sketch']);
+    expect(sketchIssues(PNG_PREFIX + 'A'.repeat(700_000 - PNG_PREFIX.length))).toEqual([]);
+    expect(sketchIssues(PNG_PREFIX + 'A'.repeat(700_001 - PNG_PREFIX.length))).toEqual(['sketch']);
+    expect(
+      sketchIssues(`${PNG_PREFIX}AA==`, { clientId: 'client-01', kind: 'choose', optionId: 'opt-b', text: '' }),
+    ).toEqual(['sketch']);
+    expect(sketchIssues(`${PNG_PREFIX}AA==`, { clientId: 'client-01', kind: 'done', text: '' })).toEqual(['sketch']);
+  });
 });

@@ -123,12 +123,14 @@ interface BrowserMessage {
   clientId: string /* ^[A-Za-z0-9_-]{8,64}$, browser-minted idempotency key */;
   kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
   text: string /* ask: 1..ANSWER_MAX; choose/done: '' */; excerpt?: string /* ≤EXCERPT_MAX */;
-  threadId?: string /* ask only: reply into that thread */
+  threadId?: string /* ask only: reply into that thread */;
+  proposal?: Graph /* ask only, on a block with a diagram: the user's edited version, positions dropped */;
+  sketch?: string /* ask only: data:image/png;base64,… ≤ SKETCH_MAX (700 000) chars; the bytes must start with the PNG signature */
 }
 
 // ---------- state (persisted as <stateDir>/plans/<id>.json) ----------
 interface Exchange { id: string /* == ask message id */; threadId: string /* == the thread's first ask id */;
-  question: string; excerpt?: string; askedAt: string;
+  question: string; excerpt?: string; proposal?: Graph; sketch?: true /* the PNG lives in sketches/, never here */; askedAt: string;
   state: 'asked' | 'delivered' | 'answered'; answer?: { md: string; diagram?: Graph; at: string } }
 interface BlockBase { id: string; kind: Block['kind']; label: string; rev: number /* 1, +1 per touch */;
   touchedAt: number /* plan revision when last touched */; qa: Exchange[] }
@@ -140,7 +142,7 @@ interface StepsBlock extends BlockBase { kind: 'steps'; optionId: string; letter
 type Block = FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
 
 interface Message { id: string /* 'm-<n>' */; clientId: string; kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
-  threadId?: string /* set on every ask */; text: string; excerpt?: string; at: string; deliveredAt?: string; ackedAt?: string }
+  threadId?: string /* set on every ask */; text: string; excerpt?: string; proposal?: Graph; sketch?: true; at: string; deliveredAt?: string; ackedAt?: string }
 interface PlanState {
   schemaVersion: 1;
   plan: { id: string; title: string; task: string; blocks: Block[] /* render order */; openedAt: string };
@@ -251,11 +253,15 @@ RECOMMENDED_LOCKED | KIND_MISMATCH | SERVER_UNREACHABLE | POLL_INTERRUPTED | INV
 {"id":"m-8","kind":"choose","block_id":"opt-a","option_id":"opt-a","text":"","at":"…"}
 {"id":"m-10","kind":"ask","block_id":"opt-b","block_label":"…","thread_id":"m-7","thread":[{"question":"why does this arrow go backwards?","excerpt":"retry once","answer":"It retries once…"}],"text":"and on a 401?","at":"…"}
 {"id":"m-11","kind":"done","text":"","at":"…"}
+{"id":"m-12","kind":"ask","block_id":"opt-b","block_label":"…","thread_id":"m-12","thread":[],"text":"why not this?","proposal":{"nodes":[…],"edges":[…]},"proposal_changes":["added box Cache (new)","added arrow Refresh call → Cache"],"sketch_path":"/Users/me/.pinpoint/sketches/auth-refresh/m-12.png","at":"…"}
 ```
 
 Every ask carries `thread_id` and `thread`: the earlier answered exchanges of that thread
 (`question`, `excerpt?`, `answer` markdown) in ask order, empty for a fresh question. `choose` and
-`done` carry neither key.
+`done` carry neither key. An ask with a `proposal` also carries `proposal_changes`, the
+`diffGraphs` lines from the block's diagram to the proposal. An ask with a sketch carries
+`sketch_path`, the absolute path of its PNG (from `Persistence.sketchPath`), after
+`proposal_changes`; it is absent when no file exists (a memory-only helper).
 
 Status rules: a pending `done` → `done`; else any pending → `messages`; cap reached → `waiting`;
 browser grace expired while polling → `browser_closed`.
@@ -277,7 +283,12 @@ browser grace expired while polling → `browser_closed`.
   shape) and run `<inv> append-steps <id> opt-a --file <steps.json>`". When `page.pollers > 1`:
   "Another poll is attached to this plan; coordinate before answering." When any ask is present:
   "Start every subagent above in one message and wait for all of them; poll only after every answer
-  is written.", because a poll re-delivers every unanswered message. Then POLL_TAIL.
+  is written.", because a poll re-delivers every unanswered message. Then POLL_TAIL. An ask with
+  `proposal` adds, before "Then run": "The user attached their own version of this diagram
+  (`proposal_changes`); have the subagent explain why it would or would not work, answer with a
+  diagram when that helps, and patch the block only after the user agrees in the thread." An ask with
+  `sketch_path` then adds: "The user drew on the diagram; pass `sketch_path` to the subagent to open
+  with the Read tool."
 - done: "The user finished reviewing. Stop polling and continue in the conversation. Chosen: Way A.
   Unanswered questions: m-7 (Way B: 'why …')." (the server already acked everything)
 - waiting: "Nothing arrived within the wait cap; nothing was lost. " + POLL_TAIL
@@ -307,7 +318,8 @@ GET  /api/plans/:id/blocks/:blockId.html       exactly renderBlock(block)
 PUT  /api/plans/:id/blocks/:blockId            BlockInput → receipt
 POST /api/plans/:id/answers                    AnswerInput → receipt
 POST /api/plans/:id/steps                      StepsInput → receipt
-POST /api/plans/:id/messages                   BrowserMessage → {message, block?:{blockId, rev, html}, revision, duplicate}
+POST /api/plans/:id/messages                   BrowserMessage → {message, block?:{blockId, rev, html}, revision, duplicate}; a sketch is decoded, checked for the PNG signature (400 INVALID_INPUT `sketch`) and saved under the new message id
+GET  /api/plans/:id/sketches/:mid.png          image/png, only for an exchange with sketch: true (404 NOT_FOUND otherwise)
 POST /api/plans/:id/acks                       {ids} → receipt
 GET  /api/plans/:id/poll?timeoutMs=N           long-poll
 GET  /api/plans/:id/events?since=R             SSE
@@ -362,7 +374,10 @@ One file per plan, `<stateDir>/plans/<id>.json`, rewritten whole on every transi
 `writeFileSync(tmp)` + `renameSync(tmp, final)`. Loaded once at boot; a file that fails to parse is
 renamed to `<id>.json.corrupt-<iso>` and skipped, never fatal. `schemaVersion` is checked on load,
 and an exchange or ask saved without a `threadId` loads as its own thread (`threadId = id`). A write
-failure surfaces as 500 `IO` and the in-memory state is rolled back.
+failure surfaces as 500 `IO` and the in-memory state is rolled back. A sketch is written the same way
+to `<stateDir>/sketches/<plan>/<message>.png` right after its ask is saved and before the poll is
+woken; a retried ask (same `clientId`) rewrites it. The memory persistence keeps sketches in a Map,
+serves them through `loadSketch`, and its `sketchPath` is always null.
 
 ## 6. Browser UX
 
@@ -433,6 +448,24 @@ is "the held line" (questions, waiting, agent working).
   `REPLY · <label>`, a draft keyed `<block>:<thread>`, and posts the ask with `threadId`. A 409
   `THREAD_BUSY` keeps the text and shows the server's message as the hint. Hand-back disables every
   Reply button.
+- **Diagram editor** (`diagram-editor.ts`): Edit diagram (`data-testid=edit-<block>`) swaps the
+  figure for `data-testid=editor-<block>`, one editor at a time. Toolbar: Add box (`add-box`, disabled
+  at 8), Status (`status-selected`), Delete (`delete-selected`), Reset (`reset-diagram`), Draw (`draw`,
+  `aria-pressed`), Undo (`undo-stroke`), Clear (`clear-strokes`), a polite note (`editor-note`), Ask
+  about my version (`ask-version`) and Done editing (`done-editing`); every control is 44 px tall.
+  Boxes drag, move with the arrow keys (Shift for 32 px), rename on double-click or Enter, cycle
+  status with S, connect from a handle or with C then Enter, and delete with Delete; the graph is
+  kept per plan+block in sessionStorage and survives a live swap of the block. Draw turns pointer
+  strokes into `<polyline class="mark">` in `--mark` (#c8102e light, #ff6b81 dark, clear of the amber
+  `--hold` that means waiting), at most 200 points a stroke and 50 strokes; while Draw is on, boxes
+  do not drag or rename. Strokes survive a live swap but not Done editing or a reload. Ask about my
+  version opens the composer with a chip ("With your edited diagram · 2 changes", "With your
+  drawing", or both); on send the edited graph goes as `proposal` when it differs from the agent's,
+  and strokes go as `sketch`: the SVG is cloned with its computed styles inlined, its viewBox widened
+  to cover every stroke, drawn through an `Image` onto a `<canvas>` at 2x over the canvas background,
+  and sent as `toDataURL('image/png')`. An empty drawing is not attached. A successful send closes
+  the editor. The thread shows the proposal as "YOUR VERSION" and the sketch as
+  `<img class="sketch" alt="Your drawing" data-testid="sketch-<message>">` before the question.
 - **Choose**: posts `choose`; the card re-renders `requested`; when `append-steps` lands, the
   `appended` frame inserts the steps block (stage 04 fades in on first use), the card re-renders
   `ready`. A second choice appends another column.
@@ -474,8 +507,9 @@ Body (numbered, imperative):
 7. **Rules**: change only the block named; use `show --block` before `patch-block`; one poll at a
    time; each question thread gets its own Sonnet subagent and follow-ups go to the same one; you are
    the only writer (subagents return the answer, you run `answer`); wait for this poll's subagents
-   and write their answers before polling again; stdout JSON is the contract; `help` and `next_step`
-   are authoritative.
+   and write their answers before polling again; when a message carries `proposal_changes` or
+   `sketch_path`, the subagent weighs the user's version and the block is patched only after the user
+   agrees in the thread; stdout JSON is the contract; `help` and `next_step` are authoritative.
 
 ## 8. Testing strategy
 
@@ -541,6 +575,13 @@ pins the `verify` command list and the dependency list.
 | Threads (fresh ask starts one, reply joins it, `THREAD_BUSY`, `threadId` only on ask, load backfill) | state, schema, persistence | messages (409 `THREAD_BUSY`) | — | threads |
 | Thread grouping, follow-up styling, Reply button, reply composer, disabled after hand-back | render-blocks | — | — | threads |
 | Thread history in the poll, subagent routing in `next_step` and the skill | output, skill | — | — | demo-agent (follow-up cites the thread length) |
+| Diagram graph in SVG attributes, graph differences in words | svg, diff | — | — | — |
+| Proposal on an ask (ask only, `KIND_MISMATCH` without a diagram), `proposal`/`proposal_changes` in the poll, the weigh sentence, "Your version" in the thread | schema, state, output, render-blocks | — | — | diagram-edit (Ask about my version), demo-agent (echoes the changes) |
+| Editor graph model (add, remove, connect, rename, status, stored positions, limits mirrored from the schema) | client-pure | — | — | — |
+| Diagram editor (open/close, drag, keys, rename, add, delete, connect, status, reset, reload, storage failure, live swap) | — | — | — | diagram-edit |
+| Sketch on an ask (PNG data URL, 700 000 cap, ask only, PNG signature, atomic save, served by message, `sketch_path`, read sentence, `<img>` in the thread) | schema, persistence, output, render-blocks | messages (save, 400 non-PNG, serve, 404), poll (absolute path) | — | sketch |
+| Freehand drawing (Draw, Undo, Clear, 200-point and 50-stroke caps, no drag while drawing, styled PNG at 2x, no empty sketch, live swap keeps strokes) | — | — | — | sketch |
+| Proposals and sketches in the skill | skill | — | — | — |
 | Answer attached to that block only | state (`toBe`), hash | receipts (hash before == after, other block html byte-equal) | run (receipt) | live-patch (outerHTML of every other block identical) |
 | Choose → steps appended, side by side | state | steps (appended.after, 409) | run | choose |
 | Patch a block, verdict re-derived | state | receipts | run (show + patch-block) | — |
@@ -564,7 +605,7 @@ pins the `verify` command list and the dependency list.
 ### E2E specs (`test/e2e`, workers 1, each seeds its own plan id via `request.put`)
 
 `renders`, `live-patch`, `ask`, `keyboard-excerpt`, `drafts`, `choose`, `presence-done`, `toast`,
-`theme`, `reload`, `offline`, `visual`, `threads`, `demo-agent`. The webServer is `bun src/cli.ts serve
+`theme`, `reload`, `offline`, `visual`, `threads`, `diagram-edit`, `sketch`, `demo-agent`. The webServer is `bun src/cli.ts serve
 --port 4790 --state-dir .e2e-state` with `PINPOINT_NO_OPEN=1`, `url: /health`,
 `reuseExistingServer: !process.env.CI`. `scripts/demo-agent.ts` is the agent side of `demo-agent`:
 it loops `poll --timeout-ms` through the real CLI subprocess and answers asks and chooses with
