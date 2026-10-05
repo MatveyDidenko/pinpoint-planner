@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CliError } from '../../src/cli/errors';
-import { configFrom } from '../../src/cli/io';
+import { configFrom, realIo } from '../../src/cli/io';
 
 describe('configFrom', () => {
   it('configFrom returns the documented defaults', () => {
@@ -48,5 +51,43 @@ describe('configFrom', () => {
       }
     }
     expect(() => configFrom({ HOME: '/h', PINPOINT_IDLE_TIMEOUT_MS: 'soon' })).toThrow(/PINPOINT_IDLE_TIMEOUT_MS/);
+  });
+});
+
+describe('realIo', () => {
+  it('writeFile creates missing parent directories and readFile reads the text back', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pinpoint-io-'));
+    try {
+      const io = realIo();
+      const path = join(dir, 'a', 'b', 'note.txt');
+      await io.writeFile(path, 'héllo');
+      expect(await io.readFile(path)).toBe('héllo');
+      expect(await readFile(path, 'utf8')).toBe('héllo');
+      await expect(io.readFile(join(dir, 'missing.txt'))).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('sleep resolves, now returns a Date and the process facts have the right types', async () => {
+    const io = realIo();
+    await expect(io.sleep(1)).resolves.toBeUndefined();
+    expect(io.now()).toBeInstanceOf(Date);
+    expect(io.stdout('')).toBeUndefined();
+    expect(io.stderr('')).toBeUndefined();
+    expect(typeof io.isTTY).toBe('boolean');
+    expect(typeof io.argv1).toBe('string');
+    expect(io.execPath).toBe(process.execPath);
+    expect(io.cwd).toBe(process.cwd());
+    expect(io.env).toBe(process.env);
+  });
+
+  it('readStdin reads all of standard input as text', async () => {
+    const text = spyOn(Bun.stdin, 'text').mockResolvedValue('{"a":1}');
+    try {
+      expect(await realIo().readStdin()).toBe('{"a":1}');
+    } finally {
+      text.mockRestore();
+    }
   });
 });

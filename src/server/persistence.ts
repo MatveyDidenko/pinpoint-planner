@@ -122,7 +122,12 @@ export function filePersistence(dir: string, clock: () => Date): Persistence {
     sketchPath: existingSketch,
     loadSketch(planId, messageId) {
       const file = existingSketch(planId, messageId);
-      return file === null ? null : readFileSync(file);
+      if (file === null) return null;
+      try {
+        return readFileSync(file);
+      } catch (e) {
+        throw new PersistenceError(`could not read sketch ${messageId} of plan ${planId}: ${(e as Error).message}`);
+      }
     },
   };
 }

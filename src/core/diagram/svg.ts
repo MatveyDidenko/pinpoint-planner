@@ -59,7 +59,7 @@ export function renderLayoutSvg(
   const aria = opts.ariaLabel === undefined ? '' : ` role="img" aria-label="${attr(opts.ariaLabel)}"`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg"${aria} ` +
-    `viewBox="0 0 ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}">` +
+    `viewBox="0 ${layout.top ?? 0} ${layout.width} ${layout.height}" width="${layout.width}" height="${layout.height}">` +
     `${marker}${edges}${nodes}</svg>`
   );
 }

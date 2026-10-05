@@ -32,6 +32,7 @@ type Editor = {
   snapshot: EditGraph;
   graph: EditGraph;
   selected: Selection | null;
+  focused: Selection | null;
   connectFrom: string | null;
   strokes: Stroke[];
   drawing: boolean;
@@ -53,6 +54,7 @@ const TOOLBAR =
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const HANDLE_R = 6;
+const TAP_PX = 44;
 const STEP_PX = 8;
 const BIG_STEP_PX = 32;
 const DRAG_THRESHOLD_PX = 3;
@@ -114,7 +116,9 @@ function moveNode(g: EditGraph, id: string, x: number, y: number): EditGraph {
 }
 
 const nodeIdOf = (target: EventTarget | null) =>
-  target instanceof Element ? (target.closest('[data-node-id]')?.getAttribute('data-node-id') ?? null) : null;
+  target instanceof Element
+    ? (target.closest('[data-node-id]')?.getAttribute('data-node-id') ?? target.getAttribute('data-hit-node'))
+    : null;
 
 function selectionOf(target: EventTarget | null): Selection | null {
   if (!(target instanceof Element)) return null;
@@ -140,20 +144,36 @@ const toolbarButton = (editor: Editor, testId: string) =>
 
 const labelOf = (editor: Editor, id: string) => editor.graph.nodes.find((n) => n.id === id)?.label ?? id;
 
+function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string>): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
+  return el;
+}
+
 function addHitTargets(editor: Editor): void {
   const withHandles = editor.graph.edges.length < EDGE_LIMIT;
+  // A focus ring outlines everything inside a box's group, so its tap areas live beneath the boxes instead.
+  const firstNode = editor.canvas.querySelector('[data-node-id]');
   for (const node of editor.graph.nodes) {
     const g = nodeEl(editor, node.id);
     g?.setAttribute('data-testid', `box-${node.id}`);
+    const y = String(round1(node.y - (TAP_PX - NODE_H) / 2));
+    const pad = { class: 'node-hit', x: String(node.x), y, width: String(node.w), height: String(TAP_PX) };
+    firstNode?.before(svgEl('rect', { ...pad, 'data-hit-node': node.id }));
     if (!withHandles) continue;
-    const handle = document.createElementNS(SVG_NS, 'circle');
-    handle.setAttribute('class', 'handle');
-    handle.setAttribute('cx', String(round1(node.x + node.w)));
-    handle.setAttribute('cy', String(round1(node.y + NODE_H / 2)));
-    handle.setAttribute('r', String(HANDLE_R));
-    handle.setAttribute('data-handle', node.id);
-    handle.setAttribute('data-testid', `handle-${node.id}`);
-    g?.append(handle);
+    const cx = String(round1(node.x + node.w));
+    const cy = String(round1(node.y + NODE_H / 2));
+    const ring = {
+      class: 'handle-hit',
+      cx,
+      cy,
+      r: String(TAP_PX / 2),
+      'data-handle': node.id,
+      'data-hit-node': node.id,
+    };
+    firstNode?.before(svgEl('circle', ring));
+    const handle = { class: 'handle', cx, cy, r: String(HANDLE_R), 'data-handle': node.id };
+    g?.append(svgEl('circle', { ...handle, 'data-testid': `handle-${node.id}` }));
   }
   for (const path of Array.from(editor.canvas.querySelectorAll('path.edge'))) {
     const from = path.getAttribute('data-from') ?? '';
@@ -230,7 +250,7 @@ function commit(editor: Editor, next: EditGraph): void {
   if (next === editor.graph) return;
   editor.graph = next;
   render(editor);
-  saveDiagram(planId, editor.blockId, next);
+  saveDiagram(planId, editor.blockId, editor.snapshot, next);
   document.dispatchEvent(new CustomEvent(DIAGRAM_CHANGED_EVENT));
 }
 
@@ -294,6 +314,12 @@ function setConnectFrom(editor: Editor, id: string | null): void {
   sync(editor);
 }
 
+function svgPoint(svg: SVGSVGElement, e: PointerEvent): [number, number] {
+  const frame = svg.getBoundingClientRect();
+  const view = svg.viewBox.baseVal;
+  return [round1(e.clientX - frame.left + view.x), round1(e.clientY - frame.top + view.y)];
+}
+
 function startConnect(editor: Editor, event: PointerEvent, from: string): void {
   const svg = editor.canvas.querySelector('svg');
   const handle = event.target instanceof Element ? event.target.closest('[data-handle]') : null;
@@ -304,9 +330,9 @@ function startConnect(editor: Editor, event: PointerEvent, from: string): void {
   line.setAttribute('x1', handle.getAttribute('cx') ?? '0');
   line.setAttribute('y1', handle.getAttribute('cy') ?? '0');
   const follow = (e: PointerEvent) => {
-    const frame = svg.getBoundingClientRect();
-    line.setAttribute('x2', String(round1(e.clientX - frame.left)));
-    line.setAttribute('y2', String(round1(e.clientY - frame.top)));
+    const [x, y] = svgPoint(svg, e);
+    line.setAttribute('x2', String(x));
+    line.setAttribute('y2', String(y));
   };
   follow(event);
   svg.append(line);
@@ -353,12 +379,10 @@ function startStroke(editor: Editor, event: PointerEvent): void {
   const svg = editor.canvas.querySelector('svg');
   if (event.button !== 0 || svg === null || editor.strokes.length >= STROKE_LIMIT) return;
   event.preventDefault();
-  const frame = svg.getBoundingClientRect();
   const stroke: Stroke = [];
   const line = markEl(stroke);
   const add = (e: PointerEvent) => {
-    const x = round1(e.clientX - frame.left);
-    const y = round1(e.clientY - frame.top);
+    const [x, y] = svgPoint(svg, e);
     const last = stroke.at(-1);
     if (stroke.length >= POINT_LIMIT || (last?.[0] === x && last[1] === y)) return;
     stroke.push([x, y]);
@@ -381,7 +405,7 @@ function startStroke(editor: Editor, event: PointerEvent): void {
 function onKey(editor: Editor, event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault();
-    if (editor.connectFrom === null) close(true);
+    if (editor.connectFrom === null) closeEditor(true);
     else setConnectFrom(editor, null);
     return;
   }
@@ -422,7 +446,7 @@ function onKey(editor: Editor, event: KeyboardEvent): void {
   commit(editor, moveNode(editor.graph, node.id, node.x + arrow[0] * step, node.y + arrow[1] * step));
 }
 
-function close(restoreFocus: boolean): void {
+export function closeEditor(restoreFocus: boolean): void {
   if (active === null) return;
   const { root, figure } = active;
   active = null;
@@ -435,7 +459,7 @@ function open(figure: Element, kept?: Editor): void {
   const blockId = figure.closest<HTMLElement>('[data-block]')?.dataset.block;
   const svg = figure.querySelector('svg');
   if (blockId === undefined || svg === null) return;
-  close(false);
+  closeEditor(false);
 
   const root = document.createElement('div');
   root.className = 'diagram-editor';
@@ -448,7 +472,7 @@ function open(figure: Element, kept?: Editor): void {
   if (canvas === null) return;
 
   const snapshot = readGraph(svg);
-  const graph = kept?.graph ?? loadDiagram(planId, blockId) ?? snapshot;
+  const graph = kept?.graph ?? loadDiagram(planId, blockId, snapshot) ?? snapshot;
   const editor: Editor = {
     blockId,
     figure,
@@ -457,6 +481,7 @@ function open(figure: Element, kept?: Editor): void {
     snapshot,
     graph,
     selected: null,
+    focused: null,
     connectFrom: null,
     strokes: kept?.strokes ?? [],
     drawing: kept?.drawing ?? false,
@@ -467,7 +492,7 @@ function open(figure: Element, kept?: Editor): void {
 
   const onClick = (testId: string, handler: () => void) =>
     toolbarButton(editor, testId)?.addEventListener('click', handler);
-  onClick('done-editing', () => close(true));
+  onClick('done-editing', () => closeEditor(true));
   onClick('delete-selected', () => remove(editor, editor.selected));
   onClick('reset-diagram', () => {
     editor.selected = null;
@@ -501,8 +526,14 @@ function open(figure: Element, kept?: Editor): void {
   });
   root.addEventListener('keydown', (event) => onKey(editor, event));
   root.addEventListener('focusin', (event) => {
-    const sel = selectionOf(event.target);
-    if (sel !== null) select(editor, sel);
+    editor.focused = selectionOf(event.target);
+    if (editor.focused !== null) select(editor, editor.focused);
+  });
+  canvas.addEventListener('mousedown', (event) => {
+    const id = event.target instanceof Element ? event.target.getAttribute('data-hit-node') : null;
+    if (id === null) return;
+    event.preventDefault();
+    nodeEl(editor, id)?.focus();
   });
   canvas.addEventListener('pointerdown', (event) => {
     if (editor.drawing) {
@@ -520,7 +551,10 @@ function open(figure: Element, kept?: Editor): void {
     if (id !== null && !editor.drawing) startRename(editor, id);
   });
   // A reopen after a live swap takes focus only when the swap dropped it, so a composer keeps its caret.
-  if (kept === undefined || document.activeElement === document.body) root.focus();
+  if (kept === undefined || document.activeElement === document.body) {
+    const restored = kept?.focused ? focusTarget(editor, kept.focused) : null;
+    (restored ?? root).focus();
+  }
 }
 
 /** The edited graph of the block being edited, without positions, or null when it says the same as the agent's. */
@@ -546,15 +580,18 @@ function sketchSvg(editor: Editor, svg: SVGSVGElement): { markup: string; width:
     const computed = getComputedStyle(el);
     copies[i]?.setAttribute('style', INLINED_STYLES.map((p) => `${p}:${computed.getPropertyValue(p)}`).join(';'));
   });
-  for (const el of Array.from(clone.querySelectorAll('.handle, .edge-hit, .connect-preview'))) el.remove();
+  for (const el of Array.from(clone.querySelectorAll('.handle, .handle-hit, .node-hit, .edge-hit, .connect-preview'))) {
+    el.remove();
+  }
 
   const points = editor.strokes.flat();
   const xs = points.map(([x]) => x);
   const ys = points.map(([, y]) => y);
-  const left = Math.min(0, ...xs.map((x) => x - SKETCH_MARGIN));
-  const top = Math.min(0, ...ys.map((y) => y - SKETCH_MARGIN));
-  const width = Math.max(numberAttr(svg, 'width'), ...xs.map((x) => x + SKETCH_MARGIN)) - left;
-  const height = Math.max(numberAttr(svg, 'height'), ...ys.map((y) => y + SKETCH_MARGIN)) - top;
+  const view = svg.viewBox.baseVal;
+  const left = Math.min(view.x, ...xs.map((x) => x - SKETCH_MARGIN));
+  const top = Math.min(view.y, ...ys.map((y) => y - SKETCH_MARGIN));
+  const width = Math.max(view.x + view.width, ...xs.map((x) => x + SKETCH_MARGIN)) - left;
+  const height = Math.max(view.y + view.height, ...ys.map((y) => y + SKETCH_MARGIN)) - top;
   clone.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
   clone.setAttribute('width', String(width));
   clone.setAttribute('height', String(height));
@@ -583,7 +620,7 @@ export async function editedSketch(blockId: string): Promise<string | null> {
 
 export function finishProposal(blockId: string): void {
   clearDiagram(planId, blockId);
-  if (active?.blockId === blockId) close(false);
+  if (active?.blockId === blockId) closeEditor(false);
 }
 
 export function initDiagramEditor(forPlan: string): void {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { buildClientAssets, FONT_FILES, fontCss, STUB_ASSETS } from '../../src/server/assets';
 
 describe('buildClientAssets', () => {
@@ -77,5 +77,31 @@ describe('buildClientAssets', () => {
     expect(blocks.filter((block) => block.family !== 'Source Serif 4').every((block) => block.style === 'normal')).toBe(
       true,
     );
+  });
+
+  it('a failed client build rejects with the build logs', async () => {
+    const build = spyOn(Bun, 'build').mockResolvedValue({
+      success: false,
+      outputs: [],
+      logs: ['boom'],
+    } as unknown as Bun.BuildOutput);
+    try {
+      await expect(buildClientAssets()).rejects.toThrow('client build failed:\nboom');
+    } finally {
+      build.mockRestore();
+    }
+  });
+
+  it('a build with no output rejects', async () => {
+    const build = spyOn(Bun, 'build').mockResolvedValue({
+      success: true,
+      outputs: [],
+      logs: [],
+    } as unknown as Bun.BuildOutput);
+    try {
+      await expect(buildClientAssets()).rejects.toThrow('client build produced no output');
+    } finally {
+      build.mockRestore();
+    }
   });
 });

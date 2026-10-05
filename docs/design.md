@@ -467,16 +467,18 @@ is "the held line" (questions, waiting, agent working).
   whose last exchange is answered ends with a server-rendered Reply button (`data-action=reply`,
   `data-testid=reply-<thread>`). Reply opens the composer under that thread with heading
   `REPLY · <label>`, a draft keyed `<block>:<thread>`, and posts the ask with `threadId`. A 409
-  `THREAD_BUSY` keeps the text and shows the server's message as the hint. Hand-back disables every
-  Reply button.
+  `THREAD_BUSY` keeps the text and shows the server's message as the hint. Hand-back closes an open
+  editor and disables every Reply and Edit diagram button, including those in blocks swapped in later.
 - **Diagram editor** (`diagram-editor.ts`): Edit diagram (`data-testid=edit-<block>`) swaps the
   figure for `data-testid=editor-<block>`, one editor at a time. Toolbar: Add box (`add-box`, disabled
   at 8), Status (`status-selected`), Delete (`delete-selected`), Reset (`reset-diagram`), Draw (`draw`,
   `aria-pressed`), Undo (`undo-stroke`), Clear (`clear-strokes`), a polite note (`editor-note`), Ask
   about my version (`ask-version`) and Done editing (`done-editing`); every control is 44 px tall.
   Boxes drag, move with the arrow keys (Shift for 32 px), rename on double-click or Enter, cycle
-  status with S, connect from a handle or with C then Enter, and delete with Delete; the graph is
-  kept per plan+block in sessionStorage and survives a live swap of the block. Draw turns pointer
+  status with S, connect from a handle or with C then Enter, and delete with Delete; boxes and handles
+  carry invisible 44 px tap areas beneath them. The graph is kept per plan+block in sessionStorage
+  with the diagram it was edited from, dropped on open once the agent's diagram differs, and survives
+  a live swap of the block. Draw turns pointer
   strokes into `<polyline class="mark">` in `--mark` (#c8102e light, #ff6b81 dark, clear of the amber
   `--hold` that means waiting), at most 200 points a stroke and 50 strokes; while Draw is on, boxes
   do not drag or rename. Strokes survive a live swap but not Done editing or a reload. Ask about my
@@ -596,7 +598,7 @@ pins the `verify` command list and the dependency list.
 | Look-first findings block | render-blocks | plans (page has findings) | — | renders |
 | Context section (optional then required, reserved `context` id, context block first, summary/terms/flows rendered, How it works today as stage 01, patchable with threads kept) | schema, state, render-blocks, render-page | events (context replayed first), plans | run (block ids start with `context`) | renders (five eyebrows), visual |
 | Option summary (80..400 chars, required, carried onto the block, shown between header and diagram) | schema, state, render-blocks | — | — | visual |
-| Acronym check (undefined acronym → issue at its path, `open` and `PUT` reject) | quality, schema | — | — | — |
+| Acronym check (undefined acronym → issue at its path, `open`, `PUT` and `patch-block` reject) | quality, schema | — | — | — |
 | Skill asks for today's flows and terms before the ways, and a summary per way | skill | — | — | — |
 | Three diagrams, one recommended, verdict | layout, svg, render-blocks | blocks.html = renderBlock | — | renders (3 svg, 1 ribbon, verdict) |
 | Option tabs (one card shown, tab switch, keys, live swap keeps the tab, Jump switches tab), cost words | render-page, render-blocks | — | — | renders, tabs, toast |
@@ -615,7 +617,7 @@ pins the `verify` command list and the dependency list.
 | Choose → steps appended, side by side | state | steps (appended.after, 409) | run | choose |
 | Patch a block, verdict re-derived | state | receipts | run (show + patch-block) | — |
 | Long-poll (10 cases) | poll-hub, stream, output | poll, socket | run (poll wake through `run()`), subprocess | demo-agent |
-| Durability (persist before wake, atomic file, restart) | persistence, store | poll #6, #7 | — | reload |
+| Durability (persist before wake, atomic file, restart) | persistence, store | poll #6, #7 | — | choose (reload keeps the steps) |
 | Live updates (hello, replay by touchedAt, frames) | sse-hub, frames | events | — | live-patch, choose |
 | Presence chip and hand-back | presence | events, poll #9 | status | presence-done |
 | Browser grace | timers | poll #10 | — | — |
@@ -626,7 +628,7 @@ pins the `verify` command list and the dependency list.
 | Skill generate / check / install | skill | — | run (`skill --install --out`) | — |
 | Security (hostname, Origin, body limit, markdown XSS, jsonScript) | markdown, esc, guard | guard | — | — |
 | Fonts offline | assets | fonts route | — | offline (no request leaves 127.0.0.1) |
-| Theme, drafts, reload | — | — | — | theme, drafts, reload |
+| Theme, drafts, reload | — | — | — | theme, drafts |
 | Keyboard-only ask | client pure fns | — | — | keyboard-excerpt |
 | Visual baseline | — | — | — | visual (1280 light/dark, 390 light) |
 | Top to bottom (browser → helper → real CLI → helper → browser) | — | — | — | demo-agent |
@@ -634,8 +636,8 @@ pins the `verify` command list and the dependency list.
 ### E2E specs (`test/e2e`, workers 1, each seeds its own plan id via `request.put`)
 
 `renders`, `live-patch`, `ask`, `keyboard-excerpt`, `drafts`, `choose`, `presence-done`, `toast`,
-`theme`, `reload`, `offline`, `visual`, `threads`, `diagram-edit`, `sketch`, `demo-agent`. The webServer is `bun src/cli.ts serve
---port 4790 --state-dir .e2e-state` with `PINPOINT_NO_OPEN=1`, `url: /health`,
+`theme`, `offline`, `visual`, `tabs`, `threads`, `diagram-edit`, `sketch`, `demo-agent`. The webServer is
+`mise x -- bun bin/pinpoint.ts serve --port 4790 --state-dir .e2e-state` with `PINPOINT_NO_OPEN=1`, `url: /health`,
 `reuseExistingServer: !process.env.CI`. `scripts/demo-agent.ts` is the agent side of `demo-agent`:
 it loops `poll --timeout-ms` through the real CLI subprocess and answers asks and chooses with
 canned fixtures, and it is also the hackathon demo driver when Claude is not on the line. A follow-up's

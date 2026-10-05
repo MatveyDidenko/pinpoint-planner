@@ -268,7 +268,7 @@ describe('renderEditableSvg', () => {
     const hostile = renderEditableSvg(renameNode(editGraph, 'n1', '<b>"x"&'), 'edit-arrow');
 
     expect(svg).toStartWith('<svg');
-    expect(svg).toContain('viewBox="0 0 291.6 134" width="291.6" height="134"');
+    expect(svg).toContain('viewBox="0 -40 291.6 174" width="291.6" height="174"');
     expect(count(svg, /<marker id="edit-arrow"/g)).toBe(1);
     for (const node of editGraph.nodes) {
       expect(svg).toContain(`<rect x="${node.x}" y="${node.y}" width="${node.w}" height="${NODE_H}" rx="8"`);

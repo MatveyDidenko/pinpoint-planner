@@ -1,4 +1,5 @@
-import type { Graph, Issue, PlanInput } from './schema';
+import type { BlockInput, ContextInput, Graph, Issue } from './schema';
+import type { Block, ContextBlock, OptionBlock } from './types';
 
 const ACRONYM = /\b[A-Z][A-Z0-9]{1,5}s?\b/g;
 const COMMON_ACRONYMS = new Set([
@@ -24,7 +25,12 @@ function graphTexts(graph: Graph, path: string) {
   ];
 }
 
-export function undefinedAcronyms(plan: PlanInput): Issue[] {
+type AcronymScope = {
+  context: ContextInput;
+  options: Pick<OptionBlock, 'name' | 'pattern' | 'summary' | 'why' | 'diagram'>[];
+};
+
+export function undefinedAcronyms(plan: AcronymScope): Issue[] {
   const terms = plan.context.terms.map((t) => t.term.toLowerCase());
   const texts = [
     { path: 'context.summary', text: plan.context.summary },
@@ -48,4 +54,21 @@ export function undefinedAcronyms(plan: PlanInput): Issue[] {
     );
     return Array.from(undefinedHere, (acronym) => ({ path, message: `define ${acronym} in context.terms` }));
   });
+}
+
+/** Checks an option patch against the current context terms, and a context patch's own text and every option against its new terms. */
+export function patchAcronyms(blocks: Block[], blockId: string, input: BlockInput): Issue[] {
+  const context = blocks.find((b): b is ContextBlock => b.kind === 'context');
+  if (context === undefined || blocks.find((b) => b.id === blockId)?.kind !== input.kind) return [];
+  if (input.kind === 'option') {
+    return undefinedAcronyms({ context, options: [input] })
+      .filter(({ path }) => path.startsWith('options.'))
+      .map((issue) => ({ ...issue, path: issue.path.slice('options.0.'.length) }));
+  }
+  if (input.kind !== 'context') return [];
+  const options = blocks.filter((b): b is OptionBlock => b.kind === 'option');
+  return undefinedAcronyms({ context: input, options }).map((issue) => ({
+    ...issue,
+    path: issue.path.replace(/^context\./, ''),
+  }));
 }

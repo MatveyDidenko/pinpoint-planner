@@ -1,6 +1,6 @@
 import type { Boot } from '../shared/frames';
 import { initComposer } from './composer';
-import { initDiagramEditor } from './diagram-editor';
+import { closeEditor, initDiagramEditor } from './diagram-editor';
 import { connectLive } from './live';
 import { postMessage } from './messages';
 import { appendBlock, swapBlockAnnouncingAnswer } from './patch';
@@ -15,10 +15,21 @@ document.addEventListener('click', (event) => {
   if (event.target instanceof Element && event.target.closest('[data-testid="theme-toggle"]')) toggleTheme();
 });
 
+let handedBack = false;
+
+function lockBlockButtons(root: ParentNode | null): void {
+  if (!handedBack || root === null) return;
+  for (const button of Array.from(root.querySelectorAll<HTMLButtonElement>('.reply-btn, .edit-btn'))) {
+    button.disabled = true;
+  }
+}
+
 function setHandedBack(): void {
+  handedBack = true;
   const done = document.querySelector<HTMLButtonElement>('[data-testid="done"]');
   if (done) done.disabled = true;
-  for (const reply of Array.from(document.querySelectorAll<HTMLButtonElement>('.reply-btn'))) reply.disabled = true;
+  closeEditor(false);
+  lockBlockButtons(document);
   lockSelection();
   clearSelection();
   updatePresenceChip({ presence: 'handed-back', undelivered: 0 });
@@ -53,8 +64,8 @@ if (bootText) {
         updatePresenceChip({ presence, undelivered: 0 });
       }
     },
-    block: ({ html, rev }) => swapBlockAnnouncingAnswer(html, rev),
-    appended: ({ html, after }) => appendBlock(html, after),
+    block: ({ html, rev }) => lockBlockButtons(swapBlockAnnouncingAnswer(html, rev)),
+    appended: ({ html, after }) => lockBlockButtons(appendBlock(html, after)),
     presence: (frame) => {
       if (frame.presence === 'handed-back') setHandedBack();
       else updatePresenceChip(frame);

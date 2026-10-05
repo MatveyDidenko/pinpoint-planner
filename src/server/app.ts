@@ -16,6 +16,7 @@ import {
   receiptOutput,
 } from '../core/output';
 import { computePresence, type Presence } from '../core/presence';
+import { patchAcronyms } from '../core/quality';
 import { renderBlock } from '../core/render/blocks';
 import { type Assets, renderHome, renderPage } from '../core/render/page';
 import {
@@ -483,6 +484,8 @@ export function createApp(deps: AppDeps): PinpointApp {
     const parsed = parseBlockInput(await readJson(c));
     if (!parsed.ok) throw new InvalidInputError(parsed.issues);
     const prev = requirePlan(store, id);
+    const acronyms = patchAcronyms(prev.plan.blocks, blockId, parsed.value);
+    if (acronyms.length > 0) throw new InvalidInputError(acronyms);
     const transition = applyChecked(id, (s, now) => patchBlock(s, blockId, parsed.value, now));
     publish(id, transition);
     return receipt(c, id, 'patched', prev, transition);

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { EXAMPLES } from '../../src/cli/examples';
 import type { CliIo } from '../../src/cli/io';
-import { run } from '../../src/cli/run';
+import { run, runSignalCleanups } from '../../src/cli/run';
 import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
 import { POLL_KEYS } from '../../src/core/output';
 import { parseAnswerInput, parseBlockInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
@@ -501,6 +504,13 @@ describe('skill --install', () => {
     return { io, out, written };
   }
 
+  it('skill --install reports INVALID_INPUT when the generated skill exceeds the size cap', async () => {
+    const oversized = installIo({ PINPOINT_INVOCATION: 'x'.repeat(5000) });
+    expect(await run(['skill', '--install', '--out', '/tmp/x/SKILL.md'], oversized.io)).toBe(1);
+    expect(oversized.written).toEqual([]);
+    expect(onlyDocument(oversized.out)).toMatchObject({ status: 'error', code: 'INVALID_INPUT' });
+  });
+
   it('skill --install --out writes a file whose allowed-tools carries the absolute invocation', async () => {
     const custom = installIo({});
     expect(await run(['skill', '--install', '--out', '/tmp/x/SKILL.md'], custom.io)).toBe(0);
@@ -539,5 +549,103 @@ describe('skill --install', () => {
     expect(await run(['skill', '--out', '/tmp/x/SKILL.md'], io)).toBe(1);
     expect(onlyDocument(out)).toMatchObject({ status: 'error', code: 'BAD_ARGS' });
     expect(written).toEqual([]);
+  });
+});
+
+describe('serve', () => {
+  async function freePort(): Promise<number> {
+    const probe = Bun.serve({ port: 0, fetch: () => new Response('') });
+    const port = probe.port as number;
+    await probe.stop(true);
+    return port;
+  }
+
+  it('serves until /api/shutdown, logs listening and stopped, and exits 0', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'pinpoint-serve-'));
+    try {
+      const out: string[] = [];
+      const err: string[] = [];
+      const io = fakeIo({
+        stdout: (s) => {
+          out.push(s);
+        },
+        stderr: (s) => {
+          err.push(s);
+        },
+      });
+      const port = String(await freePort());
+      const running = run(['serve', '--port', port, '--state-dir', stateDir, '--idle-ms', '60000'], io);
+      await waitFor(() => out.length === 1);
+      const doc = JSON.parse(out[0] as string) as { status: string; url: string; state_dir: string };
+      expect(doc.status).toBe('serving');
+      expect(doc.state_dir).toBe(stateDir);
+      expect(doc.url).toBe(`http://127.0.0.1:${port}`);
+      const health = await fetch(`${doc.url}/health`);
+      expect(health.status).toBe(200);
+      const shutdown = await fetch(`${doc.url}/api/shutdown`, { method: 'POST' });
+      expect(shutdown.status).toBe(200);
+      expect(await running).toBe(0);
+      expect(err.join('')).toContain(`listening on ${doc.url} (state ${stateDir})`);
+      expect(err.at(-1)).toContain('pinpoint helper stopped');
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('a non-numeric --port is BAD_ARGS and prints no serving document', async () => {
+    const out: string[] = [];
+    const io = fakeIo({
+      stdout: (s) => {
+        out.push(s);
+      },
+    });
+    expect(await run(['serve', '--port', 'abc'], io)).toBe(1);
+    expect(JSON.parse(out.join(''))).toMatchObject({ status: 'error', code: 'BAD_ARGS' });
+  });
+
+  it('runSignalCleanups stops a running helper and reports whether anything ran', async () => {
+    expect(await runSignalCleanups()).toBe(false);
+    const stateDir = await mkdtemp(join(tmpdir(), 'pinpoint-serve-'));
+    try {
+      const out: string[] = [];
+      const err: string[] = [];
+      const io = fakeIo({
+        stdout: (s) => {
+          out.push(s);
+        },
+        stderr: (s) => {
+          err.push(s);
+        },
+      });
+      const running = run(['serve', '--port', String(await freePort()), '--state-dir', stateDir], io);
+      await waitFor(() => out.length === 1);
+      expect(await runSignalCleanups()).toBe(true);
+      expect(await running).toBe(0);
+      expect(err.at(-1)).toContain('pinpoint helper stopped');
+      expect(await runSignalCleanups()).toBe(false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('a port that is already taken is an IO error logged to stderr', async () => {
+    const taken = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('') });
+    try {
+      const out: string[] = [];
+      const err: string[] = [];
+      const io = fakeIo({
+        stdout: (s) => {
+          out.push(s);
+        },
+        stderr: (s) => {
+          err.push(s);
+        },
+      });
+      expect(await run(['serve', '--port', String(taken.port), '--state-dir', tmpdir()], io)).toBe(1);
+      expect(JSON.parse(out.join(''))).toMatchObject({ status: 'error', code: 'IO' });
+      expect(err.join('')).toContain('pinpoint helper error:');
+    } finally {
+      await taken.stop(true);
+    }
   });
 });

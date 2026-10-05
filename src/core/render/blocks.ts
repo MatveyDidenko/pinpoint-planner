@@ -8,9 +8,9 @@ const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
 const RISK_WORDS = { low: 'Low', medium: 'Medium', high: 'High' } as const;
 const MAX_PIPS = 3;
 
-function blockShell(b: Block, planId: string, inner: string, modifiers = ''): string {
+function blockShell(b: Block, planId: string, inner: string, modifiers = '', attrs = ''): string {
   return (
-    `<section class="block block--${b.kind}${modifiers}" id="block-${attr(b.id)}" data-block="${attr(b.id)}" ` +
+    `<section class="block block--${b.kind}${modifiers}" id="block-${attr(b.id)}"${attrs} data-block="${attr(b.id)}" ` +
     `data-kind="${b.kind}" data-rev="${b.rev}" data-label="${attr(b.label)}" tabindex="0" ` +
     `data-testid="block-${attr(b.id)}">` +
     `<button type="button" class="ask-btn" data-action="ask" data-testid="ask-${attr(b.id)}">Ask</button>` +
@@ -127,7 +127,8 @@ function renderOption(b: OptionBlock, planId: string): string {
     `${renderCost(b)}` +
     `${why}` +
     `<footer class="choose">${renderChooseFooter(b)}</footer>`;
-  return blockShell(b, planId, inner, b.recommended ? ' block--recommended' : '');
+  const panel = ` role="tabpanel" aria-labelledby="tab-${attr(b.id)}"`;
+  return blockShell(b, planId, inner, b.recommended ? ' block--recommended' : '', panel);
 }
 
 function renderFindings(b: FindingsBlock, planId: string): string {

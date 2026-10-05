@@ -796,6 +796,20 @@ figure svg,
   outline: none;
 }
 
+.node-hit,
+.handle-hit {
+  fill: transparent;
+  touch-action: none;
+}
+
+.node-hit {
+  cursor: grab;
+}
+
+.handle-hit {
+  cursor: crosshair;
+}
+
 .handle {
   fill: var(--surface);
   stroke: var(--accent);
@@ -816,7 +830,8 @@ figure svg,
 }
 
 .editor-canvas[data-drawing],
-.editor-canvas[data-drawing] .node {
+.editor-canvas[data-drawing] .node,
+.editor-canvas[data-drawing] .node-hit {
   cursor: crosshair;
   touch-action: none;
 }

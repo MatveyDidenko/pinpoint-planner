@@ -14,7 +14,11 @@ export function openCommandFor(platform: NodeJS.Platform, url: string): [string,
   }
 }
 
-export function openBrowser(url: string): void {
-  const [command, ...args] = openCommandFor(process.platform, url);
-  spawn(command, args, { detached: true, stdio: 'ignore' }).unref();
+export function openBrowser(
+  url: string,
+  platform: NodeJS.Platform = process.platform,
+  spawnFn: typeof spawn = spawn,
+): void {
+  const [command, ...args] = openCommandFor(platform, url);
+  spawnFn(command, args, { detached: true, stdio: 'ignore' }).unref();
 }

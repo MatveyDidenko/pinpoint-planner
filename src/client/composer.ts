@@ -4,6 +4,7 @@ import { clearDraft, loadDraft, saveDraft } from './draft';
 import { postMessage, UNREACHABLE_MESSAGE } from './messages';
 import { SWAPPED_EVENT } from './patch';
 import { clearSelection, SELECTED_EVENT, type SelectedDetail, selectBlock, selectedBlock } from './select';
+import { OPTION_SHOWN_EVENT } from './tabs';
 
 export type ComposerKeyAction = 'send' | 'newline' | 'close' | 'none';
 
@@ -199,6 +200,11 @@ export function initComposer(planId: string): void {
     const block = blockId === null ? null : selectedBlock();
     if (block === null) close();
     else open(block, picked);
+  });
+
+  document.addEventListener(OPTION_SHOWN_EVENT, () => {
+    const target = anchor();
+    if (openBlockId !== null && (target === null || target.getClientRects().length === 0)) clearSelection();
   });
 
   document.addEventListener(SWAPPED_EVENT, (event) => {

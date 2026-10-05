@@ -46,7 +46,7 @@ function optionTab(option: OptionBlock, shown: OptionBlock): string {
   const name = option.recommended ? ` aria-label="${attr(`${label} · recommended`)}"` : '';
   const star = option.recommended ? '<span class="option-tab__star" aria-hidden="true">★</span>' : '';
   return (
-    `<button type="button" role="tab" class="option-tab" data-option="${id}" data-testid="tab-${id}" aria-controls="block-${id}"` +
+    `<button type="button" role="tab" class="option-tab" id="tab-${id}" data-option="${id}" data-testid="tab-${id}" aria-controls="block-${id}"` +
     ` aria-selected="${selected}" tabindex="${selected ? 0 : -1}" title="${attr(label)}"${name}>` +
     `<span class="option-tab__label">${esc(label)}</span>${star}</button>`
   );

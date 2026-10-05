@@ -128,6 +128,8 @@ describe('filePersistence', () => {
     expect(p.sketchPath('p2', 'm-1')).toBeNull();
     writeFileSync(join(dir, 'sketches', 'p3'), 'a file where the directory should be');
     expect(() => p.saveSketch('p3', 'm-1', png)).toThrow(PersistenceError);
+    mkdirSync(join(dir, 'sketches', 'p4', 'm-1.png'), { recursive: true });
+    expect(() => p.loadSketch('p4', 'm-1')).toThrow(PersistenceError);
   });
 
   it('a write failure throws PersistenceError with code IO', () => {

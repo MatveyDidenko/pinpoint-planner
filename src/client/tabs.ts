@@ -1,5 +1,7 @@
 import { optionTabRule } from '../shared/frames';
 
+export const OPTION_SHOWN_EVENT = 'pinpoint:option-shown';
+
 const TAB_SELECTOR = '.option-tab';
 
 function allTabs(): HTMLElement[] {
@@ -16,6 +18,7 @@ export function showOption(optionId: string): void {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
   }
+  document.dispatchEvent(new CustomEvent(OPTION_SHOWN_EVENT));
 }
 
 export function initTabs(): void {

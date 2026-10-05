@@ -112,6 +112,8 @@ describe('renderPage', () => {
     for (const [i, id] of ['opt-a', 'opt-b', 'opt-c'].entries()) {
       expect(tabs[i]).toContain(`data-testid="tab-${id}"`);
       expect(tabs[i]).toContain(`aria-controls="block-${id}"`);
+      expect(tabs[i]).toContain(`id="tab-${id}"`);
+      expect(html).toContain(`id="block-${id}" role="tabpanel" aria-labelledby="tab-${id}"`);
       expect(tabs[i]).toContain(i === 0 ? 'aria-selected="true" tabindex="0"' : 'aria-selected="false" tabindex="-1"');
     }
     expect(tabs[0]).toContain('title="A · Refresh inside the fetch wrapper"');

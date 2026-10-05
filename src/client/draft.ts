@@ -45,19 +45,28 @@ export function saveDraft(planId: string, blockId: string, text: string): void {
   else writeStored(draftKey(planId, blockId), text);
 }
 
-export function loadDiagram(planId: string, blockId: string): EditGraph | null {
-  const raw = readStored(storageKey('diagram', planId, blockId));
-  if (raw === null) return null;
+function editsOn(raw: string, base: EditGraph): EditGraph | null {
   try {
-    const graph: EditGraph = JSON.parse(raw);
-    return Array.isArray(graph.nodes) && Array.isArray(graph.edges) ? graph : null;
+    const stored: { base?: EditGraph; graph?: EditGraph } = JSON.parse(raw);
+    const { graph } = stored;
+    if (graph === undefined || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
+    return JSON.stringify(stored.base) === JSON.stringify(base) ? graph : null;
   } catch {
     return null;
   }
 }
 
-export function saveDiagram(planId: string, blockId: string, graph: EditGraph): void {
-  writeStored(storageKey('diagram', planId, blockId), JSON.stringify(graph));
+/** Restores edits saved on top of `base`, discarding any saved on a diagram that has changed since. */
+export function loadDiagram(planId: string, blockId: string, base: EditGraph): EditGraph | null {
+  const key = storageKey('diagram', planId, blockId);
+  const raw = readStored(key);
+  const graph = raw === null ? null : editsOn(raw, base);
+  if (raw !== null && graph === null) removeStored(key);
+  return graph;
+}
+
+export function saveDiagram(planId: string, blockId: string, base: EditGraph, graph: EditGraph): void {
+  writeStored(storageKey('diagram', planId, blockId), JSON.stringify({ base, graph }));
 }
 
 export function clearDiagram(planId: string, blockId: string): void {

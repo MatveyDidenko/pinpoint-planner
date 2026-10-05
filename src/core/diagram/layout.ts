@@ -1,6 +1,7 @@
 import type { Graph, GraphEdge, GraphNode } from '../schema';
 
 export type GraphLayout = {
+  top?: number;
   width: number;
   height: number;
   nodes: Array<GraphNode & { x: number; y: number; w: number; h: number; layer: number }>;

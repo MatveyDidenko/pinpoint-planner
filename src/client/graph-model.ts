@@ -1,4 +1,5 @@
 import {
+  ARC_H,
   backPath,
   forwardPath,
   GAP_Y,
@@ -81,9 +82,11 @@ export function renderEditableSvg(g: EditGraph, markerId: string): string {
       : forwardPath(from.x + from.w, from.y + NODE_H / 2, to.x, to.y + NODE_H / 2);
     return { ...edge, path, back };
   });
-  // ponytail: the viewBox starts at 0 0, so a new back arc over a box at the top edge clips until bounds include arcs.
+  const yOf = (id: string) => g.nodes.find((node) => node.id === id)?.y ?? 0;
+  const arcTops = edges.filter((edge) => edge.back).map((edge) => Math.min(yOf(edge.from), yOf(edge.to)) - ARC_H - PAD);
+  const top = round1(Math.min(0, ...arcTops));
   const width = round1(Math.max(0, ...g.nodes.map((node) => node.x + node.w)) + PAD);
-  const height = round1(Math.max(0, ...g.nodes.map((node) => node.y + NODE_H)) + PAD);
+  const height = round1(Math.max(0, ...g.nodes.map((node) => node.y + NODE_H)) + PAD - top);
   const nodes = g.nodes.map((node) => ({ ...node, h: NODE_H, layer: 0 }));
-  return renderLayoutSvg({ width, height, nodes, edges }, { markerId, focusable: true });
+  return renderLayoutSvg({ top, width, height, nodes, edges }, { markerId, focusable: true });
 }

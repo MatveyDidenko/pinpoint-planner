@@ -67,6 +67,14 @@ describe('skill', () => {
     expect(unknownCommand[0]?.message).toContain('frobnicate');
   });
 
+  it('a skill without frontmatter or with a malformed allowed-tools fails validation', () => {
+    const md = createSkillMarkdown({ invocation: 'pinpoint' });
+
+    expect(validateSkill(md.slice('---\n'.length)).map((issue) => issue.path)).toEqual(['frontmatter']);
+    const badTools = validateSkill(md.replace(/^allowed-tools:.*$/m, 'allowed-tools: Read'));
+    expect(badTools.map((issue) => issue.path)).toEqual(['frontmatter.allowed-tools']);
+  });
+
   it('the skill asks for two to four ways and never says exactly three', () => {
     const md = createSkillMarkdown({ invocation: 'pinpoint' });
 
