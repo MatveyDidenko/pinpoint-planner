@@ -11,11 +11,9 @@ import {
 import { renderLayoutSvg, STATUS_ORDER } from '../core/diagram/svg';
 import type { GraphEdge, GraphNode } from '../core/schema';
 
-// Mirrors MAX_NODES from core/schema; importing it would bundle zod into the browser.
+// Mirror MAX_NODES, MAX_EDGES and the node label max in core/schema; importing them would bundle zod into the browser.
 export const NODE_LIMIT = 8;
-// Mirrors MAX_EDGES from core/schema; importing it would bundle zod into the browser.
 export const EDGE_LIMIT = 12;
-// Mirrors the node label max in core/schema; importing it would bundle zod into the browser.
 export const LABEL_LIMIT = 40;
 
 export type EditGraph = {
