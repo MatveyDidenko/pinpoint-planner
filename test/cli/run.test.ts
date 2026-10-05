@@ -56,7 +56,7 @@ describe('run read-only commands', () => {
       pending_messages: 0,
       block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks'],
     });
-    expect(statusDoc.next_step).toContain(`${INV} poll auth-refresh`);
+    expect(statusDoc.next_step).toContain('the watch wakes you');
 
     const show = cliIo(t);
     expect(await run(['show', 'auth-refresh'], show.io)).toBe(0);
@@ -185,7 +185,7 @@ describe('run open', () => {
     });
   }
 
-  it('open prints an opened document with block ids and a next_step naming poll', async () => {
+  it('open prints an opened document with block ids and a next_step naming watch', async () => {
     const t = makeTestApp();
     const opened: string[] = [];
     const first = openIo(t, opened);
@@ -199,7 +199,7 @@ describe('run open', () => {
       block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks'],
       dropped_messages: [],
     });
-    expect(doc.next_step).toContain(`\`${INV} poll auth-refresh\``);
+    expect(doc.next_step).toContain(`\`${INV} watch auth-refresh\` with the Monitor tool`);
     expect(opened).toEqual([`${TEST_BASE_URL}/plans/auth-refresh`]);
 
     const second = openIo(t, opened);
@@ -299,6 +299,35 @@ describe('run agent loop commands', () => {
     expect(err).toEqual([expect.stringContaining('waiting for messages on auth-refresh')]);
   });
 
+  it('watch prints one line per batch of new messages and exits on hand-back', async () => {
+    t = makeTestApp();
+    await seedPlan(t);
+    const { io, out } = cliIo(t);
+    const listening = () => waitFor(() => t.polls.waiters('auth-refresh') === 1);
+
+    const exit = run(['watch', 'auth-refresh'], io);
+    await listening();
+    const first = await postAsk('opt-b', 'what happens when the laptop sleeps?');
+    await waitFor(() => out.length === 1);
+    await listening();
+    const second = await postAsk('opt-a', 'and the wrapper?');
+    await waitFor(() => out.length === 2);
+    await listening();
+    await t.request('/api/plans/auth-refresh/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: 'client-done-1', kind: 'done', text: '' }),
+    });
+
+    expect(await exit).toBe(0);
+    const docs = out.map(
+      (line) => JSON.parse(line) as { status: string; messages: { id: string }[]; next_step: string },
+    );
+    expect(docs.map((doc) => doc.status)).toEqual(['messages', 'messages', 'done']);
+    expect(docs.map((doc) => doc.messages.map((m) => m.id))).toEqual([[first], [second], [expect.any(String)]]);
+    expect(docs[0]?.next_step).toContain('the watch wakes you on the next message');
+  });
+
   it('poll exits 0 with status waiting when the timeout passes with nothing posted', async () => {
     t = makeTestApp();
     await seedPlan(t);
@@ -332,7 +361,7 @@ describe('run agent loop commands', () => {
       acked: [questionId],
       pending: 1,
     });
-    expect(answeredDoc.next_step).toContain(`${INV} poll auth-refresh`);
+    expect(answeredDoc.next_step).toContain('1 message(s) still open');
     const stored = t.store.get('auth-refresh')?.plan.blocks.find((b) => b.id === 'opt-b');
     expect(stored?.qa[0]?.answer).toMatchObject({ md: answer.md, diagram: answer.diagram });
 

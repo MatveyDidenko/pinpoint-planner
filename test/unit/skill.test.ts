@@ -122,7 +122,7 @@ describe('skill', () => {
     for (const item of [
       'Each question thread gets its own Sonnet subagent; follow-ups go to the same one.',
       'You are the only writer: subagents return the answer, you run `answer`.',
-      "Wait for this poll's subagents and write their answers before polling again.",
+      "Write every subagent's answer before ending your turn.",
     ])
       expect(rules).toContain(`\n   - ${item}\n`);
   });

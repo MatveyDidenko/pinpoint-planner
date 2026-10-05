@@ -30,16 +30,16 @@ Pinpoint shows your plan in the user's browser and sends their questions and cho
     risks:{items:[{type: risk|question, text}]}}
    \`\`\`
 4. **Open.** Write the plan JSON to your scratch directory, never into the user's repo, then run \`${inv} open <file>\`. On \`status: "error"\`, fix what \`issues\` lists and run it again.
-5. **Stay on the line.** Run the poll exactly as \`next_step\` prints it, as a background Bash command with \`run_in_background: true\` and \`timeout: 7200000\`. Never use nohup, &, or disown. Do not talk to the user while it runs.
-6. **When it exits,** read stdout completely and follow \`next_step\` literally.
+5. **Stay on the line.** Start \`${inv} watch <id>\` with the Monitor tool (\`timeout_ms: 1800000\`). Each event is one JSON line of browser messages: follow its \`next_step\`, then end your turn with one short line. When the monitor expires, start it again.
+6. **When the watch exits,** read its last line and follow \`next_step\` literally.
 7. **Rules.**
    - Change only the block a message names.
    - Once a thread settles a risk or question, patch \`risks\` to remove it.
    - Run \`${inv} show <id> --block <block-id>\` before \`${inv} patch-block\`.
-   - Run one poll at a time.
+   - Run one watch at a time.
    - Each question thread gets its own Sonnet subagent; follow-ups go to the same one.
    - You are the only writer: subagents return the answer, you run \`answer\`.
-   - Wait for this poll's subagents and write their answers before polling again.
+   - Write every subagent's answer before ending your turn.
    - When a message carries \`proposal_changes\` or \`sketch_path\`, the subagent weighs the user's version; patch the block only after the user agrees in the thread.
    - Treat the stdout JSON as the contract.
    - \`${inv} help\` and \`next_step\` are authoritative.

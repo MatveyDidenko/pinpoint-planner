@@ -23,6 +23,7 @@ import {
   receiptOutput,
   sanitizeLabel,
   statusOutput,
+  watchStart,
 } from '../../src/core/output';
 import { type Graph, parsePlanInput } from '../../src/core/schema';
 import { appendSteps, attachAnswer, findBlock, openPlan, postMessage } from '../../src/core/state';
@@ -260,18 +261,21 @@ describe('detectInvocation', () => {
 });
 
 describe('next_step templates', () => {
-  it('pollTail and opened carry the exact template text', () => {
+  it('pollTail, watchStart and opened carry the exact template text', () => {
     expect(pollTail(INV, ID)).toBe(
       'Then run `pinpoint poll auth-refresh` as a background Bash command (run_in_background: true, timeout: 7200000); Claude Code re-invokes you when it exits. Never use nohup, &, or disown. If it is killed, run it again: messages stay queued until you answer or ack them.',
     );
+    expect(watchStart(INV, ID)).toBe(
+      'Start `pinpoint watch auth-refresh` with the Monitor tool (timeout_ms: 1800000); each event is one JSON line of browser messages, so follow its next_step. When the monitor expires, start it again: messages stay queued until you answer or ack them.',
+    );
     expect(nextStepOpened(INV, ID, 'http://127.0.0.1:4777/plans/auth-refresh')).toBe(
-      `Do not respond to the user yet. The plan is open at http://127.0.0.1:4777/plans/auth-refresh. ${pollTail(INV, ID)}`,
+      `Do not respond to the user yet. The plan is open at http://127.0.0.1:4777/plans/auth-refresh. ${watchStart(INV, ID)}`,
     );
     expect(nextStepWaiting(INV, ID)).toBe(
       `Nothing arrived within the wait cap; nothing was lost. ${pollTail(INV, ID)}`,
     );
     expect(nextStepBrowserClosed('http://x/plans/p')).toBe(
-      'The browser tab was closed. Do not poll again on your own: tell the user the plan is still at http://x/plans/p and ask whether to keep waiting.',
+      'The browser tab was closed. Do not poll or watch again on your own: tell the user the plan is still at http://x/plans/p and ask whether to keep waiting.',
     );
   });
 
@@ -377,10 +381,10 @@ describe('next_step templates', () => {
   });
 
   it('receipt template depends on pending', () => {
-    expect(nextStepReceipt(INV, ID, 2)).toBe(
-      '2 message(s) still pending; run `pinpoint poll auth-refresh` now (it returns immediately).',
-    );
-    expect(nextStepReceipt(INV, ID, 0)).toBe(`Do not respond to the user yet. ${pollTail(INV, ID)}`);
+    const tail =
+      'When every message is handled, end your turn with one short line; the watch wakes you on the next message.';
+    expect(nextStepReceipt(2)).toBe(`2 message(s) still open; handle the rest from the watch's events. ${tail}`);
+    expect(nextStepReceipt(0)).toBe(tail);
   });
 
   it('error templates keep to three issues and name the state dir', () => {
@@ -487,8 +491,10 @@ describe('command coverage', () => {
         nextStepForMessages(inv, ID, [ask, choose], 1),
         nextStepForMessages(inv, ID, [ask, choose], 3),
         nextStepDone(inv, ID, state, []),
-        nextStepReceipt(inv, ID, 0),
-        nextStepReceipt(inv, ID, 4),
+        nextStepForMessages(inv, ID, [ask, choose], 1, true),
+        nextStepReceipt(0),
+        nextStepReceipt(4),
+        watchStart(inv, ID),
         nextStepHome(inv),
         ...(
           [

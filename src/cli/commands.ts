@@ -31,6 +31,13 @@ export const COMMANDS: CommandDoc[] = [
     flags: ['--timeout-ms'],
   },
   {
+    name: 'watch',
+    usage: 'pinpoint watch <plan-id>',
+    summary:
+      'Print one JSON line per batch of new browser messages until hand-back or a closed tab; run it with Monitor.',
+    flags: [],
+  },
+  {
     name: 'answer',
     usage: 'pinpoint answer <plan-id> --question <mid> (--text "…" | --file <p>|-) [--diagram <graph.json>]',
     summary: 'Answer one question in the block it was asked on.',

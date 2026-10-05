@@ -196,6 +196,19 @@ describe('GET /api/plans/:id/poll', () => {
     }
   });
 
+  test('a watch poll skips the messages it has seen and tells the agent to end its turn', async () => {
+    t = makeTestApp();
+    await seedPlan(t);
+    const first = await postedId(ask('opt-b', 'is this retried?'));
+    const second = await postedId(ask('opt-a', 'and the wrapper?'));
+
+    const body = await pollJson(`timeoutMs=0&watch=1&seen=${first}`);
+
+    expect(body.messages.map((m) => m.id)).toEqual([second]);
+    expect(body.next_step).toContain('the watch wakes you on the next message');
+    expect((await pollJson(`timeoutMs=0&watch=1&seen=${first},${second}`)).status).toBe('waiting');
+  });
+
   test('done acks every pending message, lists the unanswered ones, and the next poll waits', async () => {
     t = makeTestApp();
     await seedPlan(t);
@@ -227,7 +240,7 @@ describe('GET /api/plans/:id/poll', () => {
     expect(body.plan_id).toBe(PLAN);
     expect(body.messages).toEqual([]);
     expect(body.next_step).toBe(
-      `The browser tab was closed. Do not poll again on your own: tell the user the plan is still at ${TEST_BASE_URL}/plans/${PLAN} and ask whether to keep waiting.`,
+      `The browser tab was closed. Do not poll or watch again on your own: tell the user the plan is still at ${TEST_BASE_URL}/plans/${PLAN} and ask whether to keep waiting.`,
     );
     expect(body.page.url).toBe(`${TEST_BASE_URL}/plans/${PLAN}`);
     expect(t.polls.waiters(PLAN)).toBe(0);

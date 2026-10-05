@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { COMMAND_NAMES, COMMANDS } from '../../src/cli/commands';
 
 describe('COMMANDS', () => {
-  it('lists the 13 commands once each and COMMAND_NAMES matches', () => {
+  it('lists the 14 commands once each and COMMAND_NAMES matches', () => {
     const names = COMMANDS.map((c) => c.name);
 
     expect(names).toEqual([
@@ -10,6 +10,7 @@ describe('COMMANDS', () => {
       'example',
       'open',
       'poll',
+      'watch',
       'answer',
       'append-steps',
       'patch-block',

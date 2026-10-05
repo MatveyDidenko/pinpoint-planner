@@ -222,8 +222,15 @@ export function nextStepHome(inv: Invocation): string {
   return `Write a plan as JSON (\`${inv} example plan\` prints the shape), then run \`${inv} open <plan.json>\`.`;
 }
 
+export function watchStart(inv: Invocation, id: string): string {
+  return `Start \`${inv} watch ${id}\` with the Monitor tool (timeout_ms: 1800000); each event is one JSON line of browser messages, so follow its next_step. When the monitor expires, start it again: messages stay queued until you answer or ack them.`;
+}
+
+const WATCH_TAIL =
+  'When every message is handled, end your turn with one short line; the watch wakes you on the next message.';
+
 export function nextStepOpened(inv: Invocation, id: string, url: string): string {
-  return `Do not respond to the user yet. The plan is open at ${url}. ${pollTail(inv, id)}`;
+  return `Do not respond to the user yet. The plan is open at ${url}. ${watchStart(inv, id)}`;
 }
 
 export function nextStepWaiting(inv: Invocation, id: string): string {
@@ -231,7 +238,7 @@ export function nextStepWaiting(inv: Invocation, id: string): string {
 }
 
 export function nextStepBrowserClosed(url: string): string {
-  return `The browser tab was closed. Do not poll again on your own: tell the user the plan is still at ${url} and ask whether to keep waiting.`;
+  return `The browser tab was closed. Do not poll or watch again on your own: tell the user the plan is still at ${url} and ask whether to keep waiting.`;
 }
 
 function shortLabel(label: string): string {
@@ -263,16 +270,26 @@ function messageLine(inv: Invocation, id: string, m: PollMessage): string | unde
   return undefined;
 }
 
-export function nextStepForMessages(inv: Invocation, id: string, messages: PollMessage[], pollers: number): string {
+export function nextStepForMessages(
+  inv: Invocation,
+  id: string,
+  messages: PollMessage[],
+  pollers: number,
+  watching = false,
+): string {
   const lines = messages.map((m) => messageLine(inv, id, m)).filter((line): line is string => line !== undefined);
   return [
     'Do not respond to the user yet. Handle each message in order, changing nothing but the block named:',
     ...lines,
     ...(pollers > 1 ? ['Another poll is attached to this plan; coordinate before answering.'] : []),
     ...(messages.some((m) => m.kind === 'ask')
-      ? ['Start every subagent above in one message and wait for all of them; poll only after every answer is written.']
+      ? [
+          watching
+            ? 'Start every subagent above in one message and wait for all of them; end your turn only after every answer is written.'
+            : 'Start every subagent above in one message and wait for all of them; poll only after every answer is written.',
+        ]
       : []),
-    pollTail(inv, id),
+    watching ? WATCH_TAIL : pollTail(inv, id),
   ].join('\n');
 }
 
@@ -293,10 +310,9 @@ export function nextStepDone(_inv: Invocation, _id: string, state: PlanState, un
   return `${head} Unanswered questions: ${unanswered.map((m) => unansweredItem(state, m)).join(', ')}.`;
 }
 
-export function nextStepReceipt(inv: Invocation, id: string, pending: number): string {
-  if (pending > 0)
-    return `${pending} message(s) still pending; run \`${inv} poll ${id}\` now (it returns immediately).`;
-  return `Do not respond to the user yet. ${pollTail(inv, id)}`;
+export function nextStepReceipt(pending: number): string {
+  if (pending > 0) return `${pending} message(s) still open; handle the rest from the watch's events. ${WATCH_TAIL}`;
+  return WATCH_TAIL;
 }
 
 export function nextStepError(

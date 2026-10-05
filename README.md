@@ -2,7 +2,7 @@
 
 Pinpoint turns "plan this change" into a web page of labelled blocks instead of a wall of text. The agent (Claude Code) reads the codebase first, draws three ways to do the job, marks one as recommended, and opens the page in your browser.
 
-You point at any block and ask a question or choose an option. The agent stays on the line through a long-poll to a small helper server on your laptop, answers that block only, and everything else on the page stays byte-identical. Nothing leaves the machine: fonts, scripts and styles are served from `127.0.0.1`. The full design is in [docs/design.md](docs/design.md).
+You point at any block and ask a question or choose an option. The agent stays on the line through `pinpoint watch`, a long-poll loop to a small helper server on your laptop that Claude Code's Monitor tool turns into chat events, answers that block only, and everything else on the page stays byte-identical. Nothing leaves the machine: fonts, scripts and styles are served from `127.0.0.1`. The full design is in [docs/design.md](docs/design.md).
 
 ## Install
 
@@ -20,14 +20,14 @@ Install the Claude Code skill so the agent knows when and how to use Pinpoint:
 bun bin/pinpoint.ts skill --install
 ```
 
-This writes `~/.claude/skills/pinpoint/SKILL.md` with this checkout's absolute invocation baked in, so Claude Code does not prompt for the poll.
+This writes `~/.claude/skills/pinpoint/SKILL.md` with this checkout's absolute invocation baked in, so Claude Code does not prompt for each command.
 
 ## The agent loop
 
 1. `pinpoint example plan` prints the plan shape; the agent fills it with three options after reading the code.
 2. `pinpoint open <file>` validates the plan, starts the helper if needed and opens the browser.
-3. `pinpoint poll <plan-id>` runs in the background and blocks until you ask, choose or hand back.
-4. The agent answers with `answer`, `append-steps` or `patch-block`, then polls again.
+3. `pinpoint watch <plan-id>` runs under Claude Code's Monitor tool and prints one JSON line per batch of browser messages, so each ask or choose wakes the agent with the message already in hand. It exits on hand-back or a closed tab; `pinpoint poll` is the single-shot version.
+4. The agent answers with `answer`, `append-steps` or `patch-block`, then ends its turn; the watch keeps listening.
 5. Every command prints one JSON document whose `next_step` says what to run next.
 
 `pinpoint help` lists every command. The CLI entry is `bin/pinpoint.ts`; run it as `bun bin/pinpoint.ts <cmd>`, or as `pinpoint <cmd>` once linked.

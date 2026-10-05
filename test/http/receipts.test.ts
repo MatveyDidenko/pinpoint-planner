@@ -57,7 +57,7 @@ describe('agent mutation receipts', () => {
       acked: [questionId],
       pending: 0,
     });
-    expect(receipt.next_step).toContain('Do not respond to the user yet.');
+    expect(receipt.next_step).toContain('the watch wakes you on the next message');
     const after = await Promise.all(ids.map((id) => blockHtml(t, PLAN, id)));
     ids.forEach((id, index) => {
       if (id === 'opt-b') expect(after[index]).not.toBe(before[index]);

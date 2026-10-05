@@ -161,8 +161,9 @@ export function apiClient(fetchFn: typeof fetch, baseUrl: string, inv?: string) 
     ack: (id: string, ids: string[]) => json<Receipt>(withInv(`${plan(id)}/acks`), withBody('POST', { ids })),
 
     /** A body that fails to arrive or parse after the headers were accepted is `POLL_INTERRUPTED`. */
-    poll: async (id: string, timeoutMs?: number): Promise<PollOutput> => {
+    poll: async (id: string, timeoutMs?: number, seen?: Iterable<string>): Promise<PollOutput> => {
       const extra: Record<string, string> = timeoutMs === undefined ? {} : { timeoutMs: String(timeoutMs) };
+      if (seen !== undefined) Object.assign(extra, { watch: '1', seen: [...seen].join(',') });
       const res = await send(withInv(`${plan(id)}/poll`, extra));
       try {
         const text = await res.text();

@@ -77,6 +77,8 @@ export interface PinpointApp {
 }
 
 const DEFAULT_HEARTBEAT_MS = 5000;
+type WatchQuery = { watching: boolean; seen: Set<string> };
+
 const DEFAULT_POLL_MAX_WAIT_MS = 1500000;
 const DEFAULT_BROWSER_GRACE_MS = 90000;
 const DEFAULT_INVOCATION: Invocation = 'pinpoint';
@@ -281,7 +283,7 @@ export function createApp(deps: AppDeps): PinpointApp {
         revision: state.revision,
         acked: acknowledgedBy(prev, state),
         pending,
-        nextStep: nextStepReceipt(c.req.query('inv') || DEFAULT_INVOCATION, id, pending),
+        nextStep: nextStepReceipt(pending),
       }),
     );
   };
@@ -312,19 +314,25 @@ export function createApp(deps: AppDeps): PinpointApp {
       page: pollPage(requirePlan(store, id), pollers),
     });
 
-  const deliverPending = (id: string, inv: Invocation, pollers: number): PollOutput | null => {
+  /** Delivers unacked messages the caller has not `seen`; a `done` among them acks every pending message. */
+  const deliverPending = (id: string, inv: Invocation, pollers: number, watch: WatchQuery): PollOutput | null => {
     const pending = pendingMessages(requirePlan(store, id));
-    if (pending.length === 0) return null;
-    const ids = pending.map((m) => m.id);
-    const hasDone = pending.some((m) => m.kind === 'done');
+    const fresh = pending.filter((m) => !watch.seen.has(m.id));
+    if (fresh.length === 0) return null;
+    const hasDone = fresh.some((m) => m.kind === 'done');
     const transition = store.apply(id, (s, now) => {
-      const delivered = markDelivered(s, ids, now);
+      const delivered = markDelivered(
+        s,
+        fresh.map((m) => m.id),
+        now,
+      );
       if (!hasDone) return delivered;
-      return { state: ackMessages(delivered.state, ids, now).state, touched: delivered.touched };
+      const all = pending.map((m) => m.id);
+      return { state: ackMessages(delivered.state, all, now).state, touched: delivered.touched };
     });
     publish(id, transition);
     const { state } = transition;
-    const messages = pending.map((m) => pollMessage(m, state, (mid) => store.persistence.sketchPath(id, mid)));
+    const messages = fresh.map((m) => pollMessage(m, state, (mid) => store.persistence.sketchPath(id, mid)));
     return pollOutput({
       status: hasDone ? 'done' : 'messages',
       planId: id,
@@ -336,7 +344,7 @@ export function createApp(deps: AppDeps): PinpointApp {
             state,
             pending.filter((m) => m.kind === 'ask'),
           )
-        : nextStepForMessages(inv, id, messages, pollers),
+        : nextStepForMessages(inv, id, messages, pollers, watch.watching),
       page: pollPage(state, pollers),
     });
   };
@@ -519,12 +527,16 @@ export function createApp(deps: AppDeps): PinpointApp {
     requirePlan(store, id);
     const inv = c.req.query('inv') || DEFAULT_INVOCATION;
     const timeoutMs = clampTimeout(c.req.query('timeoutMs'), pollMaxWaitMs);
-    const immediate = deliverPending(id, inv, polls.waiters(id) + 1);
+    const watch: WatchQuery = {
+      watching: c.req.query('watch') === '1',
+      seen: new Set((c.req.query('seen') ?? '').split(',').filter((mid) => mid !== '')),
+    };
+    const immediate = deliverPending(id, inv, polls.waiters(id) + 1, watch);
     if (immediate !== null) return c.json(immediate);
     if (timeoutMs === 0) return c.json(waitingOutput(id, inv, polls.waiters(id) + 1));
     return polls.listen(id, timeoutMs, c.req.raw.signal, (why, { woken }) => {
       if (why === 'browser_closed') return browserClosedOutput(id, woken);
-      return (why === 'message' ? deliverPending(id, inv, woken) : null) ?? waitingOutput(id, inv, woken);
+      return (why === 'message' ? deliverPending(id, inv, woken, watch) : null) ?? waitingOutput(id, inv, woken);
     });
   });
 

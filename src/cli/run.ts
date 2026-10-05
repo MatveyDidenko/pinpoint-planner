@@ -82,7 +82,7 @@ const status: Handler = async (ctx) => {
     presence: summary.presence,
     pendingMessages: summary.pending,
     blockIds: state.plan.blocks.map((block) => block.id),
-    nextStep: nextStepReceipt(ctx.inv, id, summary.pending),
+    nextStep: nextStepReceipt(summary.pending),
   });
 };
 
@@ -135,6 +135,21 @@ const poll: Handler = async (ctx) => {
   await ensureServer(ctx.io, ctx.config);
   ctx.io.stderr(`pinpoint: waiting for messages on ${id} (Ctrl-C is safe; messages stay queued)\n`);
   return ctx.api.poll(id, timeoutMs);
+};
+
+/** Long-polls until the plan is handed back or its tab closes, printing one JSON line per batch of new messages. */
+const watch: Handler = async (ctx) => {
+  const id = requireId(ctx);
+  await ensureServer(ctx.io, ctx.config);
+  ctx.io.stderr(`pinpoint: watching ${id}, one line per batch of messages (Ctrl-C is safe; messages stay queued)\n`);
+  const seen = new Set<string>();
+  for (;;) {
+    const out = await ctx.api.poll(id, undefined, seen);
+    if (out.status === 'done' || out.status === 'browser_closed') return out;
+    if (out.status !== 'messages') continue;
+    for (const message of out.messages) seen.add(message.id);
+    ctx.io.stdout(`${JSON.stringify(out)}\n`);
+  }
 };
 
 const answer: Handler = async (ctx) => {
@@ -312,6 +327,7 @@ const HANDLERS: Record<string, Handler> = {
   show,
   open,
   poll,
+  watch,
   answer,
   'append-steps': appendSteps,
   'patch-block': patchBlock,

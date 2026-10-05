@@ -249,6 +249,9 @@ pinpoint example [plan|steps|answer|block]  the fixture JSON for that shape
 pinpoint open <plan.json|-> [--no-open]  validate → ensure helper → PUT → open browser
                                          → {status:"opened"|"replaced", plan_id, url, revision, block_ids, dropped_messages, next_step}
 pinpoint poll <plan-id> [--timeout-ms N] → {status:"messages"|"done"|"waiting"|"browser_closed", plan_id, messages, next_step, page:{url, revision, presence, pollers, block_ids}}
+pinpoint watch <plan-id>                 loops poll with watch=1 and the ids it has printed as seen; prints one poll
+                                         document per line for each batch of new messages, skips waiting, and exits
+                                         after printing done or browser_closed. Meant to run under the Monitor tool.
 pinpoint answer <plan-id> --question <mid> (--text "…" | --file <p>|-) [--diagram <graph.json>]  → receipt
 pinpoint append-steps <plan-id> <option-id> --file <steps.json>|-                               → receipt
 pinpoint patch-block <plan-id> <block-id> --file <block.json>|-                                  → receipt
@@ -291,7 +294,12 @@ browser grace expired while polling → `browser_closed`.
 - `POLL_TAIL` = "Then run `<inv> poll <id>` as a background Bash command (run_in_background: true,
   timeout: 7200000); Claude Code re-invokes you when it exits. Never use nohup, &, or disown. If it is
   killed, run it again: messages stay queued until you answer or ack them."
-- opened: "Do not respond to the user yet. The plan is open at <url>. " + POLL_TAIL
+- WATCH_START = "Start `<inv> watch <id>` with the Monitor tool (timeout_ms: 1800000); each event is
+  one JSON line of browser messages, so follow its next_step. When the monitor expires, start it
+  again: messages stay queued until you answer or ack them."
+- WATCH_TAIL = "When every message is handled, end your turn with one short line; the watch wakes you
+  on the next message."
+- opened: "Do not respond to the user yet. The plan is open at <url>. " + WATCH_START
 - messages: "Do not respond to the user yet. Handle each message in order, changing nothing but the
   block named:" then one line per message. An ask with an empty `thread` starts a subagent: "- m-7
   (Way B): start a Sonnet subagent for thread m-7 (Agent tool, model sonnet). Give it the question,
@@ -303,7 +311,9 @@ browser grace expired while polling → `browser_closed`.
   shape) and run `<inv> append-steps <id> opt-a --file <steps.json>`". When `page.pollers > 1`:
   "Another poll is attached to this plan; coordinate before answering." When any ask is present:
   "Start every subagent above in one message and wait for all of them; poll only after every answer
-  is written.", because a poll re-delivers every unanswered message. Then POLL_TAIL. An ask with
+  is written.", because a poll re-delivers every unanswered message. Then POLL_TAIL. A watch poll
+  (`watch=1`) instead ends the subagent line with "end your turn only after every answer is written."
+  and ends with WATCH_TAIL. An ask with
   `proposal` adds, before "Then run": "The user attached their own version of this diagram
   (`proposal_changes`); have the subagent explain why it would or would not work, answer with a
   diagram when that helps, and patch the block only after the user agrees in the thread." An ask with
@@ -312,10 +322,10 @@ browser grace expired while polling → `browser_closed`.
 - done: "The user finished reviewing. Stop polling and continue in the conversation. Chosen: Way A.
   Unanswered questions: m-7 (Way B: 'why …')." (the server already acked everything)
 - waiting: "Nothing arrived within the wait cap; nothing was lost. " + POLL_TAIL
-- browser_closed: "The browser tab was closed. Do not poll again on your own: tell the user the plan
+- browser_closed: "The browser tab was closed. Do not poll or watch again on your own: tell the user the plan
   is still at <url> and ask whether to keep waiting."
-- receipt: pending > 0 → "<n> message(s) still pending; run `<inv> poll <id>` now (it returns
-  immediately)." else "Do not respond to the user yet. " + POLL_TAIL
+- receipt: pending > 0 → "<n> message(s) still open; handle the rest from the watch's events. " +
+  WATCH_TAIL, else WATCH_TAIL
 - error INVALID_INPUT: "Fix these and retry: <up to 3 'path: message'>. `<inv> example plan` prints a
   valid shape."; SERVER_UNREACHABLE / POLL_INTERRUPTED: "Run the same command again; nothing was lost.
   If it keeps failing, read <stateDir>/helper.log or run `<inv> serve` in another terminal."
@@ -341,7 +351,7 @@ POST /api/plans/:id/steps                      StepsInput → receipt
 POST /api/plans/:id/messages                   BrowserMessage → {message, block?:{blockId, rev, html}, revision, duplicate}; a sketch is decoded, checked for the PNG signature (400 INVALID_INPUT `sketch`) and saved under the new message id
 GET  /api/plans/:id/sketches/:mid.png          image/png, only for an exchange with sketch: true (404 NOT_FOUND otherwise)
 POST /api/plans/:id/acks                       {ids} → receipt
-GET  /api/plans/:id/poll?timeoutMs=N           long-poll
+GET  /api/plans/:id/poll?timeoutMs=N[&watch=1&seen=m-1,m-2]  long-poll; `seen` ids are not delivered again
 GET  /api/plans/:id/events?since=R             SSE
 POST /api/shutdown                             {ok:true} then stop
 ```
@@ -570,13 +580,15 @@ Body (numbered, imperative):
    enums spelled out. A skill test checks that every key in the plan schemas appears in this shape.
 4. **Open**: write the JSON to your scratch directory (never into the user's repo) and run
    `<inv> open <file>`. On `error`, fix per `issues` and rerun.
-5. **Stay on the line**: run the poll exactly as `next_step` prints it, as a background Bash
-   command (`run_in_background: true`, `timeout: 7200000`). Do not talk to the user while it runs.
-6. **When it exits, read stdout completely and follow `next_step` literally.**
-7. **Rules**: change only the block named; use `show --block` before `patch-block`; one poll at a
+5. **Stay on the line**: start `<inv> watch <id>` with the Monitor tool (`timeout_ms: 1800000`). Each
+   event is one JSON line: follow its `next_step`, then end the turn with one short line. Re-arm the
+   monitor when it expires. This costs two requests per message (act, then end the turn) against four
+   for a background poll (read its output file, act, start the next poll, end the turn).
+6. **When the watch exits, read its last line and follow `next_step` literally.**
+7. **Rules**: change only the block named; use `show --block` before `patch-block`; one watch at a
    time; each question thread gets its own Sonnet subagent and follow-ups go to the same one; you are
-   the only writer (subagents return the answer, you run `answer`); wait for this poll's subagents
-   and write their answers before polling again; when a message carries `proposal_changes` or
+   the only writer (subagents return the answer, you run `answer`); write every subagent's answer
+   before ending the turn; when a message carries `proposal_changes` or
    `sketch_path`, the subagent weighs the user's version and the block is patched only after the user
    agrees in the thread; stdout JSON is the contract; `help` and `next_step` are authoritative.
 
