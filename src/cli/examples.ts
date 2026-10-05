@@ -5,6 +5,7 @@ const plan: PlanInput = {
   title: 'Refresh expired auth tokens',
   task: 'Refresh expired auth tokens without logging the user out',
   context: {
+    goal: 'When an access token expires mid-session, the request still succeeds and the user never sees the sign-in screen.',
     summary:
       'Every request goes through one fetch wrapper that adds the access token from the session store. When that token expires the API answers 401, and today the wrapper treats any 401 as a logout, so the user loses their place.',
     terms: [
@@ -27,7 +28,7 @@ const plan: PlanInput = {
         steps: [
           'A call site asks the fetch wrapper for data.',
           'The wrapper adds the access token from the session store and sends the request.',
-          'The API answers 401 because the access token has expired.',
+          { text: 'The API answers 401 because the access token has expired.', guess: true },
           'The wrapper treats the 401 as a logout and clears the session, so the user signs in again.',
         ],
         diagram: {
@@ -71,6 +72,7 @@ const plan: PlanInput = {
             {
               from: 'wrapper',
               to: 'api',
+              guess: true,
             },
             {
               from: 'wrapper',
@@ -267,6 +269,19 @@ const plan: PlanInput = {
       recommended: false,
     },
   ],
+  risks: {
+    items: [
+      {
+        type: 'risk',
+        text: 'Two tabs could refresh at once, leaving one holding a token the server has already replaced.',
+      },
+      { type: 'question', text: 'Does the API revoke the old refresh token when it issues a new one?' },
+      {
+        type: 'question',
+        text: 'Should a request that is not idempotent be replayed after a refresh, or fail with a clear error?',
+      },
+    ],
+  },
 };
 
 const steps: StepsInput = {

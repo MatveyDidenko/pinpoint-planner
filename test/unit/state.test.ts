@@ -33,6 +33,7 @@ import {
   type ContextBlock,
   type OptionBlock,
   type PlanState,
+  type RisksBlock,
   StateError,
   type StepsBlock,
   type VerdictBlock,
@@ -48,18 +49,19 @@ function loadPlan(): PlanInput {
 }
 
 const CONTEXT: ContextInput = {
+  goal: 'Requests keep working when a token expires.',
   summary: 'Every request passes through one fetch wrapper.',
   terms: [{ term: 'refresh token', meaning: 'A long-lived token that buys a new access token.' }],
   flows: [{ name: 'A normal request', steps: ['The request goes out.', 'The answer comes back.'] }],
 };
 
 describe('openPlan', () => {
-  it('openPlan derives context, three lettered options and the verdict in order', () => {
+  it('openPlan derives context, three lettered options, the verdict and the risks in order', () => {
     const state = openPlan(loadPlan(), NOW);
     const blocks = state.plan.blocks;
 
-    expect(blocks.map((b) => b.kind)).toEqual(['context', 'option', 'option', 'option', 'verdict']);
-    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(blocks.map((b) => b.kind)).toEqual(['context', 'option', 'option', 'option', 'verdict', 'risks']);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks']);
     expect(blocks.filter((b): b is OptionBlock => b.kind === 'option').map((b) => b.letter)).toEqual(['A', 'B', 'C']);
     expect(blocks.map(blockLabel)).toEqual([
       'How it works today',
@@ -67,6 +69,7 @@ describe('openPlan', () => {
       'Way B · Proactive refresh timer',
       'Way C · Refresh at each call site',
       'Recommended',
+      'Risks and open questions',
     ]);
     expect(blocks.map((b) => b.label)).toEqual(blocks.map(blockLabel));
     expect(blocks.every((b) => b.rev === 1 && b.touchedAt === 1 && b.qa.length === 0)).toBe(true);
@@ -110,7 +113,7 @@ describe('openPlan', () => {
     const blocks = openPlan({ ...loadPlan(), context: CONTEXT }, NOW).plan.blocks;
     const context = blocks[0] as ContextBlock;
 
-    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks']);
     expect(context.kind).toBe('context');
     expect(context.label).toBe('How it works today');
     expect(blockLabel(context)).toBe('How it works today');
@@ -612,7 +615,7 @@ describe('appendSteps', () => {
     const steps = blocks[blocks.length - 1] as StepsBlock;
     const option = findBlock(result.state, 'opt-a') as OptionBlock;
 
-    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'steps-opt-a']);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks', 'steps-opt-a']);
     expect(steps).toEqual({
       id: 'steps-opt-a',
       kind: 'steps',
@@ -629,7 +632,7 @@ describe('appendSteps', () => {
     expect(option.rev).toBe((findBlock(prev, 'opt-a')?.rev as number) + 1);
     expect(option.touchedAt).toBe(result.state.revision);
     expect(result.touched).toEqual(['opt-a', 'steps-opt-a']);
-    expect(result.appended).toEqual({ blockId: 'steps-opt-a', after: 'verdict' });
+    expect(result.appended).toEqual({ blockId: 'steps-opt-a', after: 'risks' });
     expect(result.state.revision).toBe(prev.revision + 1);
     expect(result.state.messages.map((m) => m.ackedAt)).toEqual([later]);
     expect(pendingMessages(result.state)).toEqual([]);
@@ -750,6 +753,20 @@ describe('patchBlock', () => {
     expect(verdict.touched).toEqual(['verdict']);
   });
 
+  it('patchBlock on the risks replaces its items and keeps its threads', () => {
+    const prev = postMessage(openPlan(loadPlan(), NOW), ask('risks', 'Is it revoked?', 'client-01'), NOW).state;
+    const items: RisksBlock['items'] = [{ type: 'risk', text: 'Two tabs refresh at once.' }];
+    const result = patchBlock(prev, 'risks', { kind: 'risks', items }, NOW);
+    const after = findBlock(result.state, 'risks') as RisksBlock;
+
+    expect(after.items).toEqual(items);
+    const before = findBlock(prev, 'risks') as RisksBlock;
+    expect(after.qa).toEqual(before.qa);
+    expect(after.qa).toHaveLength(1);
+    expect(after.rev).toBe(before.rev + 1);
+    expect(result.touched).toEqual(['risks']);
+  });
+
   it('patchBlock on the context replaces its content and keeps its threads', () => {
     const opened = openPlan({ ...loadPlan(), context: CONTEXT }, NOW);
     const prev = postMessage(opened, ask('context', 'Where is the wrapper?', 'client-01'), NOW).state;
@@ -776,7 +793,14 @@ describe('patchBlock', () => {
     const result = patchBlock(openPlan(loadPlan(), NOW), 'opt-c', { ...input, id: 'opt-b' }, NOW);
 
     expect((findBlock(result.state, 'opt-c') as OptionBlock).letter).toBe('C');
-    expect(result.state.plan.blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(result.state.plan.blocks.map((b) => b.id)).toEqual([
+      'context',
+      'opt-a',
+      'opt-b',
+      'opt-c',
+      'verdict',
+      'risks',
+    ]);
   });
 
   it('patchBlock that flips recommended throws RECOMMENDED_LOCKED', () => {
@@ -831,7 +855,7 @@ describe('replacePlan', () => {
     const result = replacePlan(prev, input, LATER);
     const next = result.state;
 
-    expect(next.plan.blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(next.plan.blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks']);
     expect(next.plan.title).toBe('Auth refresh, second pass');
     expect(next.plan.task).toBe('A new task.');
     expect(next.plan.openedAt).toBe(prev.plan.openedAt);
@@ -847,7 +871,7 @@ describe('replacePlan', () => {
     expect(next.revision).toBe(prev.revision + 1);
     expect(next.nextMessageSeq).toBe(prev.nextMessageSeq);
     expect(next.review).toBe(prev.review);
-    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks']);
     for (const block of next.plan.blocks) {
       expect(block.rev).toBe((findBlock(prev, block.id)?.rev as number) + 1);
       expect(block.touchedAt).toBe(next.revision);
@@ -862,7 +886,7 @@ describe('replacePlan', () => {
     expect(added.rev).toBe(1);
     expect(added.qa).toEqual([]);
     expect(added.touchedAt).toBe(result.state.revision);
-    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-d', 'verdict']);
+    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-d', 'verdict', 'risks']);
   });
 
   it('replacePlan acks and reports pending messages on blocks that disappeared', () => {

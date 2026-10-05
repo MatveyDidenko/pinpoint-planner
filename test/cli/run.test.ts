@@ -54,7 +54,7 @@ describe('run read-only commands', () => {
       revision: 1,
       presence: 'waiting',
       pending_messages: 0,
-      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
+      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks'],
     });
     expect(statusDoc.next_step).toContain(`${INV} poll auth-refresh`);
 
@@ -196,7 +196,7 @@ describe('run open', () => {
       plan_id: 'auth-refresh',
       url: `${TEST_BASE_URL}/plans/auth-refresh`,
       revision: 1,
-      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
+      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks'],
       dropped_messages: [],
     });
     expect(doc.next_step).toContain(`\`${INV} poll auth-refresh\``);

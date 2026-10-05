@@ -55,13 +55,14 @@ describe('renderPage', () => {
     expect(html).toContain('id="toast" data-testid="toast" role="status"');
     expect(html).toContain('<p class="stage-hint">Click any card, or select text in it, to ask about it.</p>');
 
-    for (const n of ['01', '02', '03', '04']) {
+    for (const n of ['01', '02', '03', '04', '05']) {
       expect(html).toContain(`data-stage="${n}" data-testid="stage-${n}"`);
     }
     expect(html).toContain('01 · How it works today');
     expect(html).toContain('02 · Three ways');
     expect(html).toContain('03 · Recommended');
-    expect(html).toContain('04 · Steps');
+    expect(html).toContain('04 · Risks and open questions');
+    expect(html).toContain('05 · Steps');
     expect(html).not.toContain('already here');
 
     const order = state.plan.blocks.map((b) => html.indexOf(`data-block="${b.id}"`));
@@ -84,12 +85,13 @@ describe('renderPage', () => {
     expect(html).toContain('01 · How it works today');
     expect(html).toContain('02 · Three ways');
     expect(html).toContain('03 · Recommended');
-    expect(html).toContain('04 · Steps');
+    expect(html).toContain('04 · Risks and open questions');
+    expect(html).toContain('05 · Steps');
     expect(html).not.toContain('already here');
     expect(html.indexOf('data-stage="01"')).toBeLessThan(html.indexOf('data-block="context"'));
     expect(html.indexOf('data-block="context"')).toBeLessThan(html.indexOf('data-stage="02"'));
-    expect(before).toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
-    expect(html).not.toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
+    expect(before).toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
+    expect(html).not.toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
   });
 
   it('the ways stage is titled by the option count', () => {
@@ -150,8 +152,8 @@ describe('renderPage', () => {
     const before = renderPage(state, assets, opts);
     const after = renderPage(withSteps(state), assets, opts);
 
-    expect(before).toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
-    expect(after).not.toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
+    expect(before).toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
+    expect(after).not.toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
     expect(after).toContain('id="steps-grid"');
   });
 

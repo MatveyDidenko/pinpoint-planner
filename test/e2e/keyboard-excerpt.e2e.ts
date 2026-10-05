@@ -77,6 +77,24 @@ test('clicking a diagram node sends its label as the excerpt and the pill shows 
   await expect(page.locator('[data-block="opt-b"] [data-state="asked"] .excerpt')).toHaveText('Refresh timer');
 });
 
+test('clicking a guessed step or an open question quotes it in the composer', async ({ page, request }) => {
+  const id = planId();
+  await seedPlan(request, id);
+  await page.goto(`/plans/${id}`);
+
+  await page.locator('.flow-step--guess').click();
+  await expect(page.locator('[data-block="context"]')).toHaveAttribute('data-selected', '');
+  await expect(page.locator('#composer .composer-excerpt')).toHaveText(
+    'The API answers 401 because the access token has expired.',
+  );
+
+  await page.locator('.risk--question').first().click();
+  await expect(page.locator('[data-block="risks"]')).toHaveAttribute('data-selected', '');
+  await expect(page.locator('#composer .composer-excerpt')).toHaveText(
+    'Does the API revoke the old refresh token when it issues a new one?',
+  );
+});
+
 test('a text selection outside the block is not used as excerpt', async ({ page, request }) => {
   const id = planId();
   await seedPlan(request, id);

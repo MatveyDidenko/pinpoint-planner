@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { renderGraphSvg, renderLegend } from '../../src/core/diagram/svg';
-import type { Graph } from '../../src/core/schema';
+import type { Graph, Status } from '../../src/core/schema';
 
 const graph: Graph = {
   nodes: [
@@ -84,6 +84,24 @@ describe('renderGraphSvg', () => {
     expect(edges).toEqual(graph.edges);
   });
 
+  it('a guessed edge is drawn dotted and the legend explains it', () => {
+    const guessed: Graph = {
+      nodes: [
+        { id: 'a', label: 'A', status: 'new' },
+        { id: 'b', label: 'B', status: 'reused' },
+      ],
+      edges: [{ from: 'a', to: 'b', guess: true }],
+    };
+
+    expect(renderGraphSvg(guessed, opts)).toContain(
+      '<path class="edge edge--guess" data-from="a" data-to="b" data-guess="" d="',
+    );
+    expect(renderLegend(guessed)).toContain(
+      '<li data-guess=""><span class="legend-guess"></span>Guessed arrow, not checked</li>',
+    );
+    expect(renderLegend({ ...guessed, edges: [{ from: 'a', to: 'b' }] })).not.toContain('data-guess');
+  });
+
   it('an unlabelled edge has no data-edge-label', () => {
     const svg = renderGraphSvg(
       {
@@ -115,7 +133,11 @@ describe('renderGraphSvg', () => {
 
 describe('renderLegend', () => {
   it('lists only present statuses once each in canonical order', () => {
-    const html = renderLegend(['external', 'new', 'external', 'reused']);
+    const node = (id: string, status: Status) => ({ id, label: id, status });
+    const html = renderLegend({
+      nodes: [node('a', 'external'), node('b', 'new'), node('c', 'external'), node('d', 'reused')],
+      edges: [],
+    });
 
     expect(html).toStartWith('<ul class="legend"');
     expect(count(html, /<li /g)).toBe(3);

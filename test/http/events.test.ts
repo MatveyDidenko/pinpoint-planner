@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { ask, fixture, makeTestApp, readFrames, seedPlan, type TestApp } from '../helpers/test-app';
 
 const PLAN = 'auth-refresh';
-const PLAN_ORDER = ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict'];
+const PLAN_ORDER = ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'risks'];
 
 let t: TestApp;
 const controllers: AbortController[] = [];
@@ -95,7 +95,7 @@ describe('GET /api/plans/:id/events', () => {
     expect(frames[1]?.event).toBe('block');
     expect(frames[1]?.data).toMatchObject({ blockId: 'opt-a', rev: 2 });
     expect(frames[2]?.event).toBe('appended');
-    expect(frames[2]?.data).toMatchObject({ blockId: 'steps-opt-a', after: 'verdict', rev: 1, revision: 2 });
+    expect(frames[2]?.data).toMatchObject({ blockId: 'steps-opt-a', after: 'risks', rev: 1, revision: 2 });
   });
 
   test('presence flips to listening on poll attach and back on abort', async () => {

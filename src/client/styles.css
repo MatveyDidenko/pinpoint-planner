@@ -669,6 +669,12 @@ figure svg,
   stroke-dasharray: 5 4;
 }
 
+.edge--guess {
+  stroke: var(--hold);
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+
 .arrow {
   fill: var(--muted);
 }
@@ -718,6 +724,12 @@ figure svg,
 
 .legend li[data-status="external"] .legend-swatch {
   border-color: var(--faint);
+}
+
+.legend-guess {
+  display: inline-block;
+  width: 18px;
+  border-top: 2px dotted var(--hold);
 }
 
 .edit-btn {
@@ -964,6 +976,77 @@ figure svg,
   margin: 0;
   padding-left: 1.4em;
   font-size: 16px;
+}
+
+.goal {
+  margin: 0 0 16px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.goal-tag,
+.guess-tag,
+.risk-tag {
+  display: inline-block;
+  margin-right: 10px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  vertical-align: 2px;
+}
+
+.goal-tag {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.guess-tag,
+.risk--question .risk-tag {
+  background: var(--hold-soft);
+  color: var(--hold);
+}
+
+.risk--risk .risk-tag {
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+.guess-hint {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.flow-step--guess {
+  cursor: pointer;
+}
+
+.flow-step--guess:hover {
+  text-decoration: underline dotted var(--hold);
+}
+
+.risks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.risk {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.risk:first-child {
+  border-top: 0;
+}
+
+.risks-empty {
+  margin: 0;
+  color: var(--muted);
 }
 
 .verdict {

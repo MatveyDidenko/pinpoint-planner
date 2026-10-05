@@ -3,6 +3,7 @@
   "title": "Refresh expired auth tokens",
   "task": "Refresh expired auth tokens without logging the user out",
   "context": {
+    "goal": "When an access token expires mid-session, the request still succeeds and the user never sees the sign-in screen.",
     "summary": "This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. ",
     "terms": [
       {
@@ -260,5 +261,6 @@
       },
       "recommended": false
     }
-  ]
+  ],
+  "risks": { "items": [] }
 }

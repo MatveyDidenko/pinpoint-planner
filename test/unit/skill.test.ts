@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../src/cli/run';
 import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
-import { ContextInputSchema, CostSchema, GraphSchema, OptionInputSchema, PlanInputSchema } from '../../src/core/schema';
+import {
+  ContextInputSchema,
+  CostSchema,
+  GraphSchema,
+  OptionInputSchema,
+  PlanInputSchema,
+  RisksInputSchema,
+} from '../../src/core/schema';
 import { fakeIo } from '../helpers/fake-io';
 
 const COMMITTED_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
@@ -78,9 +85,14 @@ describe('skill', () => {
   it('the skill names every plan input key and does not call example plan', () => {
     const md = createSkillMarkdown({ invocation: 'pinpoint' });
     const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
-    const keys = [PlanInputSchema, ContextInputSchema, OptionInputSchema, CostSchema, GraphSchema].flatMap((schema) =>
-      Object.keys(schema.shape),
-    );
+    const keys = [
+      PlanInputSchema,
+      ContextInputSchema,
+      OptionInputSchema,
+      CostSchema,
+      GraphSchema,
+      RisksInputSchema,
+    ].flatMap((schema) => Object.keys(schema.shape));
 
     for (const key of keys) expect(rule3).toMatch(new RegExp(`[{,\\s]${key}[?:,}]`));
     expect(md).not.toContain('example plan');
@@ -91,9 +103,12 @@ describe('skill', () => {
     const rule2 = md.slice(md.indexOf('\n2. '), md.indexOf('\n3. '));
     const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
 
+    expect(rule2).toContain('Open with the `goal`');
     expect(rule2).toContain(
-      'Explain how it works today first: a summary, every acronym and project word in `terms`, and 1–3 current flows as steps.',
+      'Then explain how it works today: a summary, every acronym and project word in `terms`, and 1–3 current flows as steps.',
     );
+    expect(rule2).toContain('`guess: true`');
+    expect(rule3).toContain('`risks`');
     expect(rule3).toContain(
       'Give each way a 2–3 sentence summary; the diagram shows structure, the summary says how it behaves.',
     );

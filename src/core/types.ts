@@ -1,5 +1,5 @@
 import type { Presence } from './presence';
-import type { ContextInput, Cost, Graph, Step } from './schema';
+import type { ContextInput, Cost, Graph, RisksInput, Step } from './schema';
 
 export type Letter = 'A' | 'B' | 'C' | 'D';
 
@@ -26,6 +26,8 @@ export interface BlockBase {
 
 export interface ContextBlock extends BlockBase {
   kind: 'context';
+  // Plans saved before the goal existed have none.
+  goal?: string;
   summary: string;
   terms: ContextInput['terms'];
   flows: ContextInput['flows'];
@@ -61,7 +63,12 @@ export interface StepsBlock extends BlockBase {
   steps: Step[];
 }
 
-export type Block = ContextBlock | OptionBlock | VerdictBlock | StepsBlock;
+export interface RisksBlock extends BlockBase {
+  kind: 'risks';
+  items: RisksInput['items'];
+}
+
+export type Block = ContextBlock | OptionBlock | VerdictBlock | RisksBlock | StepsBlock;
 
 export interface Message {
   id: string;

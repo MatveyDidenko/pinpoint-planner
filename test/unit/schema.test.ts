@@ -34,6 +34,7 @@ describe('schema', () => {
     const plan = load('plan.auth-refresh.json') as PlanInput;
     const flow = (name: string) => ({ name, steps: ['The request goes out.', 'The answer comes back.'] });
     const context = {
+      goal: 'Requests keep working when a token expires.',
       summary: 'Every request passes through one fetch wrapper.',
       terms: [{ term: 'refresh token', meaning: 'A long-lived token that buys a new access token.' }],
       flows: [flow('A normal request'), flow('A request with an expired token'), flow('Logging out')],
@@ -47,6 +48,18 @@ describe('schema', () => {
       'A request with an expired token',
       'Logging out',
     ]);
+  });
+
+  it('a plan needs a goal and risks, and takes guessed steps and arrows', () => {
+    const plan = load('plan.auth-refresh.json') as PlanInput;
+    const { goal: _goal, ...noGoal } = plan.context;
+    const { risks: _risks, ...noRisks } = plan;
+
+    expect(issuePaths(parsePlanInput({ ...plan, context: noGoal }))).toContain('context.goal');
+    expect(issuePaths(parsePlanInput(noRisks))).toContain('risks');
+    expect(plan.context.flows[0]?.steps).toContainEqual({ text: expect.any(String), guess: true });
+    expect(plan.context.flows[0]?.diagram?.edges).toContainEqual({ from: 'wrapper', to: 'api', guess: true });
+    expect(parsePlanInput(plan).ok).toBe(true);
   });
 
   it('a plan without a context fails on context', () => {

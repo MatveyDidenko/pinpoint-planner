@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderBlock, renderExchange } from '../../src/core/render/blocks';
 import { esc } from '../../src/core/render/esc';
-import { type Graph, parseAnswerInput, parsePlanInput, parseStepsInput } from '../../src/core/schema';
+import { type Graph, parseAnswerInput, parsePlanInput, parseStepsInput, stepText } from '../../src/core/schema';
 import {
   appendSteps,
   attachAnswer,
@@ -13,7 +13,15 @@ import {
   patchBlock,
   postMessage,
 } from '../../src/core/state';
-import type { ContextBlock, Exchange, OptionBlock, PlanState, StepsBlock, VerdictBlock } from '../../src/core/types';
+import type {
+  ContextBlock,
+  Exchange,
+  OptionBlock,
+  PlanState,
+  RisksBlock,
+  StepsBlock,
+  VerdictBlock,
+} from '../../src/core/types';
 
 function loadState(): PlanState {
   const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'plan.auth-refresh.json'), 'utf8'));
@@ -167,6 +175,35 @@ describe('renderBlock verdict', () => {
   });
 });
 
+describe('renderBlock risks', () => {
+  const risks = (items: RisksBlock['items']): RisksBlock => ({ ...(findBlock(state, 'risks') as RisksBlock), items });
+
+  it('risks lists each item with its tag and quotes its text when clicked', () => {
+    const html = renderBlock(
+      risks([
+        { type: 'risk', text: 'Two tabs refresh <at once>.' },
+        { type: 'question', text: 'Is the old token revoked?' },
+      ]),
+      PLAN,
+    );
+
+    expect(html).toStartWith('<section class="block block--risks"');
+    expect(html).toContain(
+      '<li class="risk risk--risk" data-excerpt="Two tabs refresh &lt;at once&gt;."><span class="risk-tag">RISK</span>Two tabs refresh &lt;at once&gt;.</li>',
+    );
+    expect(html).toContain(
+      '<li class="risk risk--question" data-excerpt="Is the old token revoked?"><span class="risk-tag">QUESTION</span>Is the old token revoked?</li>',
+    );
+  });
+
+  it('risks with no items says nothing is open', () => {
+    const html = renderBlock(risks([]), PLAN);
+
+    expect(html).toContain('<p class="risks-empty">Nothing open.</p>');
+    expect(html).not.toContain('<ul class="risks">');
+  });
+});
+
 describe('renderBlock context', () => {
   it("context renders the summary, every term and each flow's steps in order", () => {
     const graph: Graph = { nodes: [{ id: 'wrapper', label: 'Fetch wrapper', status: 'reused' }], edges: [] };
@@ -174,6 +211,7 @@ describe('renderBlock context', () => {
     const parsed = parsePlanInput({
       ...raw,
       context: {
+        goal: 'Requests survive an expired token.',
         summary: 'Every request <passes> through one wrapper.',
         terms: [
           { term: '401', meaning: 'The status the API returns for an expired token.' },
@@ -181,7 +219,11 @@ describe('renderBlock context', () => {
         ],
         flows: [
           { name: 'A normal request', steps: ['The request goes out.', 'The answer comes back.'] },
-          { name: 'An expired token', steps: ['The API says 401.', 'The user is logged out.'], diagram: graph },
+          {
+            name: 'An expired token',
+            steps: ['The API says 401.', { text: 'The user is logged out.', guess: true }],
+            diagram: graph,
+          },
         ],
       },
     });
@@ -190,11 +232,18 @@ describe('renderBlock context', () => {
     const html = renderBlock(b, PLAN);
 
     expect(html).toStartWith('<section class="block block--context"');
+    expect(html).toContain('<p class="goal"><span class="goal-tag">GOAL</span>Requests survive an expired token.</p>');
+    expect(html).toContain(
+      '<li class="flow-step--guess" data-excerpt="The user is logged out." title="Click to confirm or correct this guess">' +
+        '<span class="guess-tag">GUESS</span>The user is logged out.</li>',
+    );
+    expect(html).toContain('<li>The API says 401.</li>');
+    expect(html).toContain('class="guess-hint"');
     expect(html).toContain('<div class="qa" data-testid="qa-context"></div>');
     expect(html).toContain('<p class="context-summary">Every request &lt;passes&gt; through one wrapper.</p>');
     expect(html).toContain('<dl class="terms">');
     for (const t of b.terms) expect(html).toContain(`<dt>${t.term}</dt><dd>${t.meaning}</dd>`);
-    const steps = b.flows.flatMap((f) => f.steps).map((step) => html.indexOf(`<li>${step}</li>`));
+    const steps = b.flows.flatMap((f) => f.steps).map((step) => html.indexOf(stepText(step)));
     expect(steps.every((i) => i >= 0)).toBe(true);
     expect([...steps].sort((x, y) => x - y)).toEqual(steps);
     expect(html.indexOf('data-testid="flow-0"')).toBeLessThan(html.indexOf('data-testid="flow-1"'));

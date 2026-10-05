@@ -7,6 +7,7 @@ import {
   MAX_EXCHANGES,
   type OptionInput,
   type PlanInput,
+  type RisksInput,
   type StepsInput,
 } from './schema';
 import {
@@ -17,6 +18,7 @@ import {
   type Message,
   type OptionBlock,
   type PlanState,
+  type RisksBlock,
   StateError,
   type StepsBlock,
   type Transition,
@@ -33,6 +35,8 @@ export function blockLabel(block: Block): string {
       return `Way ${block.letter} · ${block.name}`;
     case 'verdict':
       return 'Recommended';
+    case 'risks':
+      return 'Risks and open questions';
     case 'steps':
       return `Steps · Way ${block.letter} · ${block.optionName}`;
   }
@@ -56,6 +60,7 @@ function deriveContext(input: ContextInput, revision: number): ContextBlock {
     id: 'context',
     kind: 'context',
     label: '',
+    goal: input.goal,
     summary: input.summary,
     terms: input.terms,
     flows: input.flows,
@@ -97,11 +102,16 @@ function deriveVerdict(recommended: OptionBlock, revision: number): VerdictBlock
   return { ...block, label: blockLabel(block) };
 }
 
+function deriveRisks(input: RisksInput, revision: number): RisksBlock {
+  const block: RisksBlock = { ...freshBase(revision), id: 'risks', kind: 'risks', label: '', items: input.items };
+  return { ...block, label: blockLabel(block) };
+}
+
 export function deriveBlocks(input: PlanInput, revision: number): Block[] {
   const options = input.options.map((option, i) => deriveOption(option, LETTERS[i] as Letter, revision));
   const recommended = options.find((option) => option.recommended) as OptionBlock;
   const context = input.context === undefined ? [] : [deriveContext(input.context, revision)];
-  return [...context, ...options, deriveVerdict(recommended, revision)];
+  return [...context, ...options, deriveVerdict(recommended, revision), deriveRisks(input.risks, revision)];
 }
 
 export function openPlan(input: PlanInput, now: string): PlanState {
@@ -386,6 +396,7 @@ function applyPatch(block: Block, input: BlockInput, revision: number): Block {
     return { ...deriveOption(input, block.letter, revision), id: block.id, qa: block.qa, steps: block.steps };
   }
   if (input.kind === 'verdict' && block.kind === 'verdict') return { ...block, why: input.why };
+  if (input.kind === 'risks' && block.kind === 'risks') return { ...deriveRisks(input, revision), qa: block.qa };
   throw new StateError('KIND_MISMATCH', `block ${block.id} is a ${block.kind}, not a ${input.kind}`);
 }
 

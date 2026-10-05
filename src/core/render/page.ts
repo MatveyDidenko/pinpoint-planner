@@ -81,6 +81,7 @@ export function renderPage(
   const hasSteps = ofKind('steps').length > 0;
   const options = ofKind('option');
   const context = ofKind('context');
+  const risks = ofKind('risks');
 
   const sections: { title: string; inner: string; hidden?: boolean; hint?: string }[] = [
     ...(context.length > 0 ? [{ title: 'How it works today', inner: renderAll(context, s.plan.id) }] : []),
@@ -90,6 +91,15 @@ export function renderPage(
       hint: 'Click any card, or select text in it, to ask about it.',
     },
     { title: 'Recommended', inner: renderAll(ofKind('verdict'), s.plan.id) },
+    ...(risks.length > 0
+      ? [
+          {
+            title: 'Risks and open questions',
+            inner: renderAll(risks, s.plan.id),
+            hint: 'Click a question to answer it.',
+          },
+        ]
+      : []),
     {
       title: 'Steps',
       inner: `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'), s.plan.id)}</div>`,

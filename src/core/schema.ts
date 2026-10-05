@@ -13,19 +13,21 @@ export const OPTION_MAX = 4;
 export const MAX_NODES = 8;
 export const MAX_EDGES = 12;
 export const MAX_STEPS = 12;
+export const MAX_RISKS = 8;
 export const MAX_EXCHANGES = 40;
 export const SKETCH_MAX = 700_000;
 export const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 
 const sentence = z.string().min(1).max(SENTENCE_MAX);
 
-const isReservedBlockId = (id: string) => id === 'context' || id === 'verdict' || id.startsWith('steps-');
+const isReservedBlockId = (id: string) =>
+  id === 'context' || id === 'verdict' || id === 'risks' || id.startsWith('steps-');
 
 const OptionIdSchema = z
   .string()
   .regex(BLOCK_ID)
   .refine((id) => !isReservedBlockId(id), {
-    message: 'option id must not be context, verdict or start with steps-',
+    message: 'option id must not be context, verdict, risks or start with steps-',
   });
 
 const StatusSchema = z.enum(['reused', 'new', 'changed', 'external']);
@@ -40,6 +42,7 @@ const GraphEdgeSchema = z.object({
   from: z.string(),
   to: z.string(),
   label: z.string().max(24).optional(),
+  guess: z.boolean().optional(),
 });
 
 export const GraphSchema = z
@@ -78,18 +81,26 @@ export const StepSchema = z.object({
 });
 
 export const ContextInputSchema = z.object({
+  goal: sentence,
   summary: z.string().min(1).max(400),
   terms: z.array(z.object({ term: z.string().min(1).max(40), meaning: sentence })).max(8),
   flows: z
     .array(
       z.object({
         name: z.string().min(1).max(60),
-        steps: z.array(sentence).min(2).max(6),
+        steps: z
+          .array(z.union([sentence, z.object({ text: sentence, guess: z.boolean() })]))
+          .min(2)
+          .max(6),
         diagram: GraphSchema.optional(),
       }),
     )
     .min(1)
     .max(3),
+});
+
+export const RisksInputSchema = z.object({
+  items: z.array(z.object({ type: z.enum(['risk', 'question']), text: sentence })).max(MAX_RISKS),
 });
 
 const OptionFieldsSchema = z.object({
@@ -124,6 +135,7 @@ export const PlanInputSchema = z
     task: sentence,
     context: ContextInputSchema,
     options: z.array(OptionInputSchema).min(OPTION_MIN).max(OPTION_MAX),
+    risks: RisksInputSchema,
   })
   .superRefine((plan, ctx) => {
     const seen = new Set<string>();
@@ -157,6 +169,7 @@ export const BlockInputSchema = z.discriminatedUnion('kind', [
   ContextInputSchema.extend({ kind: z.literal('context') }),
   OptionFieldsSchema.extend({ kind: z.literal('option') }).superRefine(requireWhyIffRecommended),
   z.object({ kind: z.literal('verdict'), why: sentence }),
+  RisksInputSchema.extend({ kind: z.literal('risks') }),
 ]);
 
 export const BrowserMessageSchema = z
@@ -200,6 +213,9 @@ export type Status = GraphNode['status'];
 export type Cost = z.infer<typeof CostSchema>;
 export type Step = z.infer<typeof StepSchema>;
 export type ContextInput = z.infer<typeof ContextInputSchema>;
+export type FlowStep = ContextInput['flows'][number]['steps'][number];
+export const stepText = (step: FlowStep): string => (typeof step === 'string' ? step : step.text);
+export type RisksInput = z.infer<typeof RisksInputSchema>;
 export type OptionInput = z.infer<typeof OptionInputSchema>;
 export type PlanInput = z.infer<typeof PlanInputSchema>;
 export type StepsInput = z.infer<typeof StepsInputSchema>;

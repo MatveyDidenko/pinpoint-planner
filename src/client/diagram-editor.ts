@@ -107,6 +107,7 @@ function readGraph(svg: Element): EditGraph {
       from: el.getAttribute('data-from') ?? '',
       to: el.getAttribute('data-to') ?? '',
       ...(label === null ? {} : { label }),
+      ...(el.hasAttribute('data-guess') ? { guess: true } : {}),
     };
   });
   return { nodes, edges };
@@ -128,7 +129,7 @@ function showInFigure(figure: Element, blockId: string, graph: EditGraph | null)
     shown.replaceWith(agent);
   }
   const legend = figure.querySelector('.legend');
-  if (legend !== null) legend.outerHTML = renderLegend((placed ?? agentGraph).nodes.map((n) => n.status));
+  if (legend !== null) legend.outerHTML = renderLegend(placed ?? agentGraph);
 }
 
 function showSaved(figure: Element): void {

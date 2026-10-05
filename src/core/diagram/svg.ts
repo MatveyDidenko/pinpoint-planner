@@ -42,10 +42,11 @@ function edgeLabelPoint(layout: GraphLayout, edge: GraphLayout['edges'][number])
 
 function renderEdge(layout: GraphLayout, edge: GraphLayout['edges'][number], markerId: string): string {
   if (edge.path === '') return '';
-  const cls = edge.back ? 'edge edge--back' : 'edge';
+  const cls = `edge${edge.back ? ' edge--back' : ''}${edge.guess ? ' edge--guess' : ''}`;
   const labelAttr = edge.label === undefined ? '' : ` data-edge-label="${attr(edge.label)}"`;
+  const guessAttr = edge.guess ? ' data-guess=""' : '';
   const path =
-    `<path class="${cls}" data-from="${attr(edge.from)}" data-to="${attr(edge.to)}"${labelAttr} ` +
+    `<path class="${cls}" data-from="${attr(edge.from)}" data-to="${attr(edge.to)}"${labelAttr}${guessAttr} ` +
     `d="${attr(edge.path)}" marker-end="url(#${attr(markerId)})"/>`;
   const point = edge.label === undefined ? null : edgeLabelPoint(layout, edge);
   if (edge.label === undefined || point === null) return path;
@@ -73,13 +74,16 @@ export function renderGraphSvg(g: Graph, opts: { markerId: string; ariaLabel: st
   return renderLayoutSvg(layoutGraph(g), opts);
 }
 
-export function renderLegend(statuses: Iterable<Status>): string {
-  const present = new Set(statuses);
+export function renderLegend(g: Graph): string {
+  const present = new Set(g.nodes.map((node) => node.status));
   const items = STATUS_ORDER.filter((status) => present.has(status))
     .map(
       (status) =>
         `<li data-status="${status}"><span class="legend-swatch" style="background:var(--diagram-${status})"></span>${STATUS_LABELS[status]}</li>`,
     )
     .join('');
-  return `<ul class="legend">${items}</ul>`;
+  const guess = g.edges.some((edge) => edge.guess)
+    ? '<li data-guess=""><span class="legend-guess"></span>Guessed arrow, not checked</li>'
+    : '';
+  return `<ul class="legend">${items}${guess}</ul>`;
 }

@@ -1,6 +1,7 @@
 import { renderGraphSvg, renderLegend } from '../diagram/svg';
 import { renderMarkdown } from '../markdown';
-import type { Block, ContextBlock, Exchange, OptionBlock, StepsBlock, VerdictBlock } from '../types';
+import { type FlowStep, stepText } from '../schema';
+import type { Block, ContextBlock, Exchange, OptionBlock, RisksBlock, StepsBlock, VerdictBlock } from '../types';
 import { attr, esc } from './esc';
 
 const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
@@ -142,7 +143,7 @@ function renderOption(b: OptionBlock, planId: string): string {
     `<span class="pattern">${esc(b.pattern)}</span>` +
     `</header>` +
     `${summary}` +
-    `<figure class="diagram">${diagram}${renderLegend(b.diagram.nodes.map((n) => n.status))}${editButton(b)}</figure>` +
+    `<figure class="diagram">${diagram}${renderLegend(b.diagram)}${editButton(b)}</figure>` +
     `<div class="reuses">${chips}</div>` +
     `${renderCost(b)}` +
     `${why}` +
@@ -162,15 +163,40 @@ function renderContext(b: ContextBlock, planId: string): string {
         flow.diagram === undefined
           ? ''
           : `<figure class="flow-diagram">${renderGraphSvg(flow.diagram, { markerId: `mk-context-${i}`, ariaLabel: `${flow.name} diagram` })}` +
-            `${renderLegend(flow.diagram.nodes.map((n) => n.status))}</figure>`;
-      const steps = flow.steps.map((step) => `<li>${esc(step)}</li>`).join('');
+            `${renderLegend(flow.diagram)}</figure>`;
+      const steps = flow.steps.map(renderFlowStep).join('');
       return (
         `<section class="flow" data-testid="flow-${i}">` +
         `<h3 class="flow-name">${esc(flow.name)}</h3><ol class="flow-steps">${steps}</ol>${diagram}</section>`
       );
     })
     .join('');
-  return blockShell(b, planId, `<p class="context-summary">${esc(b.summary)}</p>${terms}${flows}`);
+  const goal = b.goal === undefined ? '' : `<p class="goal"><span class="goal-tag">GOAL</span>${esc(b.goal)}</p>`;
+  const guessed = b.flows.some((flow) => flow.steps.some((step) => typeof step !== 'string' && step.guess));
+  const hint = guessed
+    ? '<p class="guess-hint">Steps marked GUESS were not checked in the code. Click one to confirm or correct it.</p>'
+    : '';
+  return blockShell(b, planId, `${goal}<p class="context-summary">${esc(b.summary)}</p>${terms}${hint}${flows}`);
+}
+
+function renderFlowStep(step: FlowStep): string {
+  if (typeof step === 'string' || !step.guess) return `<li>${esc(stepText(step))}</li>`;
+  return (
+    `<li class="flow-step--guess" data-excerpt="${attr(step.text)}" title="Click to confirm or correct this guess">` +
+    `<span class="guess-tag">GUESS</span>${esc(step.text)}</li>`
+  );
+}
+
+function renderRisks(b: RisksBlock, planId: string): string {
+  const items = b.items
+    .map(
+      (item) =>
+        `<li class="risk risk--${item.type}" data-excerpt="${attr(item.text)}">` +
+        `<span class="risk-tag">${item.type === 'risk' ? 'RISK' : 'QUESTION'}</span>${esc(item.text)}</li>`,
+    )
+    .join('');
+  const inner = b.items.length === 0 ? '<p class="risks-empty">Nothing open.</p>' : `<ul class="risks">${items}</ul>`;
+  return blockShell(b, planId, inner);
 }
 
 function renderVerdict(b: VerdictBlock, planId: string): string {
@@ -210,6 +236,8 @@ export function renderBlock(b: Block, planId: string): string {
       return renderOption(b, planId);
     case 'verdict':
       return renderVerdict(b, planId);
+    case 'risks':
+      return renderRisks(b, planId);
     case 'steps':
       return renderSteps(b, planId);
   }

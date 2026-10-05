@@ -30,7 +30,7 @@ describe('PUT /api/plans/:id', () => {
       block_ids: createdBody.block_ids,
       dropped_messages: [],
     });
-    expect(createdBody.block_ids.length).toBe(5);
+    expect(createdBody.block_ids.length).toBe(6);
 
     const replaced = await put('/api/plans/auth-refresh', { ...input, title: 'Refresh tokens, second draft' });
     expect(replaced.status).toBe(200);

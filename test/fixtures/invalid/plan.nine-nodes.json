@@ -3,6 +3,7 @@
   "title": "Refresh expired auth tokens",
   "task": "Refresh expired auth tokens without logging the user out",
   "context": {
+    "goal": "When an access token expires mid-session, the request still succeeds and the user never sees the sign-in screen.",
     "summary": "Every request goes through one fetch wrapper that adds the access token from the session store. When that token expires the API answers 401, and today the wrapper treats any 401 as a logout, so the user loses their place.",
     "terms": [
       {
@@ -262,5 +263,6 @@
       },
       "recommended": false
     }
-  ]
+  ],
+  "risks": { "items": [] }
 }
