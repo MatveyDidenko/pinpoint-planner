@@ -30,7 +30,7 @@ describe('PUT /api/plans/:id', () => {
       block_ids: createdBody.block_ids,
       dropped_messages: [],
     });
-    expect(createdBody.block_ids.length).toBe(6);
+    expect(createdBody.block_ids.length).toBe(5);
 
     const replaced = await put('/api/plans/auth-refresh', { ...input, title: 'Refresh tokens, second draft' });
     expect(replaced.status).toBe(200);
@@ -107,7 +107,7 @@ describe('read routes', () => {
     expect(page.status).toBe(404);
     expect(page.headers.get('content-type')).toContain('text/html');
 
-    expect((await t.request('/api/plans/missing-plan/blocks/findings')).status).toBe(404);
+    expect((await t.request('/api/plans/missing-plan/blocks/context')).status).toBe(404);
     const noBlock = await t.request('/api/plans/auth-refresh/blocks/nope');
     expect(noBlock.status).toBe(404);
     expect(((await noBlock.json()) as { code: string }).code).toBe('NOT_FOUND');

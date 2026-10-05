@@ -12,7 +12,6 @@ export const OPTION_MIN = 2;
 export const OPTION_MAX = 4;
 export const MAX_NODES = 8;
 export const MAX_EDGES = 12;
-export const MAX_FINDINGS = 12;
 export const MAX_STEPS = 12;
 export const MAX_EXCHANGES = 40;
 export const SKETCH_MAX = 700_000;
@@ -20,14 +19,13 @@ export const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 
 const sentence = z.string().min(1).max(SENTENCE_MAX);
 
-const isReservedBlockId = (id: string) =>
-  id === 'context' || id === 'findings' || id === 'verdict' || id.startsWith('steps-');
+const isReservedBlockId = (id: string) => id === 'context' || id === 'verdict' || id.startsWith('steps-');
 
 const OptionIdSchema = z
   .string()
   .regex(BLOCK_ID)
   .refine((id) => !isReservedBlockId(id), {
-    message: 'option id must not be context, findings, verdict or start with steps-',
+    message: 'option id must not be context, verdict or start with steps-',
   });
 
 const StatusSchema = z.enum(['reused', 'new', 'changed', 'external']);
@@ -67,12 +65,6 @@ export const GraphSchema = z
     });
   });
 
-export const FindingSchema = z.object({
-  path: z.string().min(1).max(120),
-  role: z.enum(['reuse', 'touch', 'context']),
-  note: sentence,
-});
-
 export const CostSchema = z.object({
   effort: z.enum(['S', 'M', 'L']),
   risk: z.enum(['low', 'medium', 'high']),
@@ -83,12 +75,6 @@ export const StepSchema = z.object({
   title: sentence,
   touches: z.array(z.string().min(1).max(120)).max(8),
   test: sentence,
-});
-
-export const FindingsInputSchema = z.object({
-  summary: sentence,
-  items: z.array(FindingSchema).min(1).max(MAX_FINDINGS),
-  diagram: GraphSchema.optional(),
 });
 
 export const ContextInputSchema = z.object({
@@ -137,7 +123,6 @@ export const PlanInputSchema = z
     title: z.string().min(1).max(80),
     task: sentence,
     context: ContextInputSchema,
-    findings: FindingsInputSchema,
     options: z.array(OptionInputSchema).min(OPTION_MIN).max(OPTION_MAX),
   })
   .superRefine((plan, ctx) => {
@@ -170,7 +155,6 @@ export const AnswerInputSchema = z.object({
 
 export const BlockInputSchema = z.discriminatedUnion('kind', [
   ContextInputSchema.extend({ kind: z.literal('context') }),
-  FindingsInputSchema.extend({ kind: z.literal('findings') }),
   OptionFieldsSchema.extend({ kind: z.literal('option') }).superRefine(requireWhyIffRecommended),
   z.object({ kind: z.literal('verdict'), why: sentence }),
 ]);
@@ -213,10 +197,8 @@ export type Graph = z.infer<typeof GraphSchema>;
 export type GraphNode = Graph['nodes'][number];
 export type GraphEdge = Graph['edges'][number];
 export type Status = GraphNode['status'];
-export type Finding = z.infer<typeof FindingSchema>;
 export type Cost = z.infer<typeof CostSchema>;
 export type Step = z.infer<typeof StepSchema>;
-export type FindingsInput = z.infer<typeof FindingsInputSchema>;
 export type ContextInput = z.infer<typeof ContextInputSchema>;
 export type OptionInput = z.infer<typeof OptionInputSchema>;
 export type PlanInput = z.infer<typeof PlanInputSchema>;

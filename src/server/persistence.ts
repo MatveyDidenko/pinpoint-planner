@@ -46,16 +46,18 @@ function isCurrentState(value: unknown): value is PlanState {
   return typeof value === 'object' && value !== null && (value as { schemaVersion?: unknown }).schemaVersion === 1;
 }
 
-// Plans saved before threads existed have exchanges and asks without a threadId.
-function withThreadIds(state: PlanState): PlanState {
+// Plans saved earlier can hold a findings block, or exchanges and asks without a threadId.
+function upgraded(state: PlanState): PlanState {
   return {
     ...state,
     plan: {
       ...state.plan,
-      blocks: state.plan.blocks.map((block) => ({
-        ...block,
-        qa: block.qa.map((exchange) => ({ ...exchange, threadId: exchange.threadId ?? exchange.id })),
-      })),
+      blocks: state.plan.blocks
+        .filter((block) => String(block.kind) !== 'findings')
+        .map((block) => ({
+          ...block,
+          qa: block.qa.map((exchange) => ({ ...exchange, threadId: exchange.threadId ?? exchange.id })),
+        })),
     },
     messages: state.messages.map((message) =>
       message.kind === 'ask' ? { ...message, threadId: message.threadId ?? message.id } : message,
@@ -96,7 +98,7 @@ export function filePersistence(dir: string, clock: () => Date): Persistence {
         }
         return null;
       }
-      return isCurrentState(parsed) ? withThreadIds(parsed) : null;
+      return isCurrentState(parsed) ? upgraded(parsed) : null;
     },
     save(id, state) {
       try {

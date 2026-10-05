@@ -7,7 +7,7 @@ const planId = () => `choose-${Date.now()}`;
 const stepsFixture = (name: string): unknown =>
   JSON.parse(readFileSync(new URL(`../fixtures/steps.${name}.json`, import.meta.url), 'utf8'));
 
-test('choose A shows Chosen, steps posted through the api appear in stage 05, choose C lands beside them', async ({
+test('choose A shows Chosen, steps posted through the api appear in stage 04, choose C lands beside them', async ({
   page,
   request,
 }) => {
@@ -15,7 +15,7 @@ test('choose A shows Chosen, steps posted through the api appear in stage 05, ch
   await page.setViewportSize({ width: 1280, height: 900 });
   await seedPlan(request, id);
   await page.goto(`/plans/${id}`);
-  await expect(page.getByTestId('stage-05')).toBeHidden();
+  await expect(page.getByTestId('stage-04')).toBeHidden();
 
   await page.getByTestId('choose-opt-a').click();
   await expect(page.locator('[data-block="opt-a"]')).toContainText('Chosen · waiting for steps');
@@ -23,7 +23,7 @@ test('choose A shows Chosen, steps posted through the api appear in stage 05, ch
 
   await request.post(`/api/plans/${id}/steps`, { data: stepsFixture('opt-a') });
   await expect(page.locator('[data-block="steps-opt-a"]')).toBeVisible();
-  await expect(page.getByTestId('stage-05')).toBeVisible();
+  await expect(page.getByTestId('stage-04')).toBeVisible();
   await expect(page.getByTestId('steps-link-opt-a')).toBeVisible();
   await expect(page.getByTestId('choose-opt-a')).toHaveCount(0);
 

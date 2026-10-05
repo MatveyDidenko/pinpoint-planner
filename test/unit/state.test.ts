@@ -6,7 +6,6 @@ import {
   type BlockInput,
   type BrowserMessage,
   type ContextInput,
-  type Finding,
   type Graph,
   MAX_EXCHANGES,
   type OptionInput,
@@ -32,7 +31,6 @@ import {
 } from '../../src/core/state';
 import {
   type ContextBlock,
-  type FindingsBlock,
   type OptionBlock,
   type PlanState,
   StateError,
@@ -56,16 +54,15 @@ const CONTEXT: ContextInput = {
 };
 
 describe('openPlan', () => {
-  it('openPlan derives context, findings, three lettered options and the verdict in order', () => {
+  it('openPlan derives context, three lettered options and the verdict in order', () => {
     const state = openPlan(loadPlan(), NOW);
     const blocks = state.plan.blocks;
 
-    expect(blocks.map((b) => b.kind)).toEqual(['context', 'findings', 'option', 'option', 'option', 'verdict']);
-    expect(blocks.map((b) => b.id)).toEqual(['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(blocks.map((b) => b.kind)).toEqual(['context', 'option', 'option', 'option', 'verdict']);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
     expect(blocks.filter((b): b is OptionBlock => b.kind === 'option').map((b) => b.letter)).toEqual(['A', 'B', 'C']);
     expect(blocks.map(blockLabel)).toEqual([
       'How it works today',
-      "What's already here",
       'Way A · Refresh inside the fetch wrapper',
       'Way B · Proactive refresh timer',
       'Way C · Refresh at each call site',
@@ -79,7 +76,7 @@ describe('openPlan', () => {
     expect(state.review).toBe('open');
     expect(state.messages).toEqual([]);
     expect(state.plan.openedAt).toBe(NOW);
-    expect(findBlock(state, 'opt-b')).toBe(blocks[3]);
+    expect(findBlock(state, 'opt-b')).toBe(blocks[2]);
     expect(findBlock(state, 'nope')).toBeUndefined();
     expect((blocks[2] as OptionBlock).steps).toEqual({ state: 'none' });
   });
@@ -113,7 +110,7 @@ describe('openPlan', () => {
     const blocks = openPlan({ ...loadPlan(), context: CONTEXT }, NOW).plan.blocks;
     const context = blocks[0] as ContextBlock;
 
-    expect(blocks.map((b) => b.id)).toEqual(['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
     expect(context.kind).toBe('context');
     expect(context.label).toBe('How it works today');
     expect(blockLabel(context)).toBe('How it works today');
@@ -615,15 +612,7 @@ describe('appendSteps', () => {
     const steps = blocks[blocks.length - 1] as StepsBlock;
     const option = findBlock(result.state, 'opt-a') as OptionBlock;
 
-    expect(blocks.map((b) => b.id)).toEqual([
-      'context',
-      'findings',
-      'opt-a',
-      'opt-b',
-      'opt-c',
-      'verdict',
-      'steps-opt-a',
-    ]);
+    expect(blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict', 'steps-opt-a']);
     expect(steps).toEqual({
       id: 'steps-opt-a',
       kind: 'steps',
@@ -752,18 +741,10 @@ describe('patchBlock', () => {
     expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict') as VerdictBlock);
   });
 
-  it('patchBlock on findings and verdict replaces their content', () => {
+  it('patchBlock on the verdict replaces its content', () => {
     const prev = openPlan(loadPlan(), NOW);
-    const oneItem = loadPlan().findings.items[0] as Finding;
-    const findings = patchBlock(prev, 'findings', { kind: 'findings', summary: 'New summary.', items: [oneItem] }, NOW);
     const verdict = patchBlock(prev, 'verdict', { kind: 'verdict', why: 'A better reason.' }, NOW);
-    const patchedFindings = findBlock(findings.state, 'findings') as FindingsBlock;
 
-    expect(patchedFindings.summary).toBe('New summary.');
-    expect(patchedFindings.items).toEqual([oneItem]);
-    expect('diagram' in patchedFindings).toBe(false);
-    expect(patchedFindings.rev).toBe(2);
-    expect(findings.touched).toEqual(['findings']);
     expect((findBlock(verdict.state, 'verdict') as VerdictBlock).why).toBe('A better reason.');
     expect((findBlock(verdict.state, 'verdict') as VerdictBlock).rev).toBe(2);
     expect(verdict.touched).toEqual(['verdict']);
@@ -787,7 +768,7 @@ describe('patchBlock', () => {
     expect(after.rev).toBe(before.rev + 1);
     expect(after.touchedAt).toBe(result.state.revision);
     expect(result.touched).toEqual(['context']);
-    expect(findBlock(result.state, 'findings')).toBe(findBlock(prev, 'findings') as FindingsBlock);
+    expect(findBlock(result.state, 'verdict')).toBe(findBlock(prev, 'verdict'));
   });
 
   it('patchBlock keeps the block id when the input names another option', () => {
@@ -795,14 +776,7 @@ describe('patchBlock', () => {
     const result = patchBlock(openPlan(loadPlan(), NOW), 'opt-c', { ...input, id: 'opt-b' }, NOW);
 
     expect((findBlock(result.state, 'opt-c') as OptionBlock).letter).toBe('C');
-    expect(result.state.plan.blocks.map((b) => b.id)).toEqual([
-      'context',
-      'findings',
-      'opt-a',
-      'opt-b',
-      'opt-c',
-      'verdict',
-    ]);
+    expect(result.state.plan.blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
   });
 
   it('patchBlock that flips recommended throws RECOMMENDED_LOCKED', () => {
@@ -821,9 +795,9 @@ describe('patchBlock', () => {
       { optionId: 'opt-a', steps: [{ title: 'Do it', touches: [], test: 'It is done.' }] },
       NOW,
     ).state;
-    const findings: BlockInput = { kind: 'findings', summary: 'x', items: [loadPlan().findings.items[0] as Finding] };
+    const context: BlockInput = { kind: 'context', ...CONTEXT };
 
-    expect(thrownCode(() => patchBlock(withSteps, 'opt-a', findings, NOW))).toBe('KIND_MISMATCH');
+    expect(thrownCode(() => patchBlock(withSteps, 'opt-a', context, NOW))).toBe('KIND_MISMATCH');
     expect(thrownCode(() => patchBlock(withSteps, 'verdict', loadPatch(), NOW))).toBe('KIND_MISMATCH');
     expect(thrownCode(() => patchBlock(withSteps, 'steps-opt-a', loadPatch(), NOW))).toBe('KIND_MISMATCH');
   });
@@ -839,7 +813,7 @@ describe('replacePlan', () => {
 
   function withExchanges(): PlanState {
     let state = openPlan(loadPlan(), NOW);
-    state = postMessage(state, ask('findings', 'what is this?', 'client-01'), NOW).state;
+    state = postMessage(state, ask('context', 'what is this?', 'client-01'), NOW).state;
     state = postMessage(state, ask('opt-b', 'why a timer?', 'client-02'), NOW).state;
     state = postMessage(state, ask('verdict', 'sure?', 'client-03'), NOW).state;
     return appendSteps(state, stepsOptA, NOW).state;
@@ -857,11 +831,11 @@ describe('replacePlan', () => {
     const result = replacePlan(prev, input, LATER);
     const next = result.state;
 
-    expect(next.plan.blocks.map((b) => b.id)).toEqual(['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(next.plan.blocks.map((b) => b.id)).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
     expect(next.plan.title).toBe('Auth refresh, second pass');
     expect(next.plan.task).toBe('A new task.');
     expect(next.plan.openedAt).toBe(prev.plan.openedAt);
-    expect(findBlock(next, 'findings')?.qa.map((e) => e.question)).toEqual(['what is this?']);
+    expect(findBlock(next, 'context')?.qa.map((e) => e.question)).toEqual(['what is this?']);
     expect(findBlock(next, 'opt-b')?.qa.map((e) => e.question)).toEqual(['why a timer?']);
     expect(findBlock(next, 'verdict')?.qa.map((e) => e.question)).toEqual(['sure?']);
     expect(findBlock(next, 'opt-a')?.qa).toEqual([]);
@@ -873,7 +847,7 @@ describe('replacePlan', () => {
     expect(next.revision).toBe(prev.revision + 1);
     expect(next.nextMessageSeq).toBe(prev.nextMessageSeq);
     expect(next.review).toBe(prev.review);
-    expect(result.touched).toEqual(['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
+    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-c', 'verdict']);
     for (const block of next.plan.blocks) {
       expect(block.rev).toBe((findBlock(prev, block.id)?.rev as number) + 1);
       expect(block.touchedAt).toBe(next.revision);
@@ -888,7 +862,7 @@ describe('replacePlan', () => {
     expect(added.rev).toBe(1);
     expect(added.qa).toEqual([]);
     expect(added.touchedAt).toBe(result.state.revision);
-    expect(result.touched).toEqual(['context', 'findings', 'opt-a', 'opt-b', 'opt-d', 'verdict']);
+    expect(result.touched).toEqual(['context', 'opt-a', 'opt-b', 'opt-d', 'verdict']);
   });
 
   it('replacePlan acks and reports pending messages on blocks that disappeared', () => {

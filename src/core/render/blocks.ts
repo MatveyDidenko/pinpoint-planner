@@ -1,6 +1,6 @@
 import { renderGraphSvg, renderLegend } from '../diagram/svg';
 import { renderMarkdown } from '../markdown';
-import type { Block, ContextBlock, Exchange, FindingsBlock, OptionBlock, StepsBlock, VerdictBlock } from '../types';
+import type { Block, ContextBlock, Exchange, OptionBlock, StepsBlock, VerdictBlock } from '../types';
 import { attr, esc } from './esc';
 
 const EFFORT_WORDS = { S: 'Small', M: 'Medium', L: 'Large' } as const;
@@ -151,26 +151,6 @@ function renderOption(b: OptionBlock, planId: string): string {
   return blockShell(b, planId, inner, b.recommended ? ' block--recommended' : '', panel);
 }
 
-function renderFindings(b: FindingsBlock, planId: string): string {
-  const diagram =
-    b.diagram === undefined
-      ? ''
-      : `<figure class="diagram">${renderGraphSvg(b.diagram, { markerId: 'mk-findings', ariaLabel: 'Existing code diagram' })}` +
-        `${renderLegend(b.diagram.nodes.map((n) => n.status))}${editButton(b)}</figure>`;
-  const rows = b.items
-    .map(
-      (item) =>
-        `<li data-role="${item.role}">` +
-        `<code class="path">${esc(item.path)}</code>` +
-        `<span class="role role--${item.role}">${item.role.toUpperCase()}</span>` +
-        `<span class="note">${esc(item.note)}</span>` +
-        `</li>`,
-    )
-    .join('');
-  const inner = `<p class="findings-summary">${esc(b.summary)}</p>${diagram}<ul class="findings">${rows}</ul>`;
-  return blockShell(b, planId, inner);
-}
-
 function renderContext(b: ContextBlock, planId: string): string {
   const terms =
     b.terms.length === 0
@@ -228,8 +208,6 @@ export function renderBlock(b: Block, planId: string): string {
       return renderContext(b, planId);
     case 'option':
       return renderOption(b, planId);
-    case 'findings':
-      return renderFindings(b, planId);
     case 'verdict':
       return renderVerdict(b, planId);
     case 'steps':

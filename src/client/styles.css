@@ -616,10 +616,6 @@ figure {
   overflow-x: auto;
 }
 
-.block--findings > .diagram {
-  box-shadow: var(--shadow);
-}
-
 figure svg,
 .answer-diagram svg {
   display: block;
@@ -912,69 +908,14 @@ figure svg,
   border-color: var(--hold);
 }
 
-.findings {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.findings li {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 7.5em minmax(0, 2fr);
-  align-items: baseline;
-  gap: 4px 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-}
-
-.path {
-  font-family: var(--mono);
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-
-.role {
-  justify-self: start;
-  padding: 1px 8px;
-  border-radius: 4px;
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-}
-
-.role--reuse {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.role--touch {
-  background: var(--hold-soft);
-  color: var(--hold);
-}
-
-.role--context {
-  background: var(--sunken);
-  color: var(--muted);
-}
-
-.note {
-  font-size: 16px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.context-summary,
-.findings-summary {
+.context-summary {
   margin: 0;
   font-size: 19px;
 }
 
 .context-summary,
-.findings-summary,
 .option-summary,
 .answer,
-.note,
 .terms dd {
   max-width: 68ch;
   text-wrap: pretty;
@@ -1568,7 +1509,6 @@ figure svg,
     gap: 32px;
   }
 
-  .findings li,
   .terms div {
     grid-template-columns: minmax(0, 1fr);
   }

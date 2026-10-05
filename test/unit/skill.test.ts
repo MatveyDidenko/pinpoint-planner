@@ -3,15 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../src/cli/run';
 import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
-import {
-  ContextInputSchema,
-  CostSchema,
-  FindingSchema,
-  FindingsInputSchema,
-  GraphSchema,
-  OptionInputSchema,
-  PlanInputSchema,
-} from '../../src/core/schema';
+import { ContextInputSchema, CostSchema, GraphSchema, OptionInputSchema, PlanInputSchema } from '../../src/core/schema';
 import { fakeIo } from '../helpers/fake-io';
 
 const COMMITTED_PATH = join(import.meta.dir, '..', '..', 'skills', 'pinpoint', 'SKILL.md');
@@ -86,15 +78,9 @@ describe('skill', () => {
   it('the skill names every plan input key and does not call example plan', () => {
     const md = createSkillMarkdown({ invocation: 'pinpoint' });
     const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
-    const keys = [
-      PlanInputSchema,
-      ContextInputSchema,
-      FindingsInputSchema,
-      FindingSchema,
-      OptionInputSchema,
-      CostSchema,
-      GraphSchema,
-    ].flatMap((schema) => Object.keys(schema.shape));
+    const keys = [PlanInputSchema, ContextInputSchema, OptionInputSchema, CostSchema, GraphSchema].flatMap((schema) =>
+      Object.keys(schema.shape),
+    );
 
     for (const key of keys) expect(rule3).toMatch(new RegExp(`[{,\\s]${key}[?:,}]`));
     expect(md).not.toContain('example plan');
@@ -111,7 +97,8 @@ describe('skill', () => {
     expect(rule3).toContain(
       'Give each way a 2–3 sentence summary; the diagram shows structure, the summary says how it behaves.',
     );
-    expect(rule3.indexOf('context:{')).toBeLessThan(rule3.indexOf('findings:{'));
+    expect(rule2).toContain('Never propose building what the code already does.');
+    expect(md).not.toContain('findings');
   });
 
   it('the skill routes each thread to its own subagent and keeps the main agent the only writer', () => {

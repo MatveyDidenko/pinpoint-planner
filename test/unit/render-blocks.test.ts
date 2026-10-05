@@ -13,15 +13,7 @@ import {
   patchBlock,
   postMessage,
 } from '../../src/core/state';
-import type {
-  ContextBlock,
-  Exchange,
-  FindingsBlock,
-  OptionBlock,
-  PlanState,
-  StepsBlock,
-  VerdictBlock,
-} from '../../src/core/types';
+import type { ContextBlock, Exchange, OptionBlock, PlanState, StepsBlock, VerdictBlock } from '../../src/core/types';
 
 function loadState(): PlanState {
   const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'plan.auth-refresh.json'), 'utf8'));
@@ -172,53 +164,6 @@ describe('renderBlock verdict', () => {
 
     expect(html).not.toContain('<img');
     expect(html).not.toContain('onerror');
-  });
-});
-
-function findings(patch: Partial<FindingsBlock> = {}): FindingsBlock {
-  return { ...(findBlock(state, 'findings') as FindingsBlock), ...patch };
-}
-
-describe('renderBlock findings', () => {
-  it('findings block lists every item with its role tag and path', () => {
-    const b = findings();
-    const html = renderBlock(b, PLAN);
-
-    expect(html).toStartWith('<section class="block block--findings"');
-    expect(html).toContain('data-kind="findings"');
-    expect(html).toContain('<div class="qa" data-testid="qa-findings"></div>');
-    expect(html).toContain('id="mk-findings"');
-    expect(html).toContain('class="legend"');
-    expect(html.match(/<li data-role="/g)?.length).toBe(b.items.length);
-    for (const item of b.items) {
-      expect(html).toContain(`<code class="path">${item.path}</code>`);
-      expect(html).toContain(`<li data-role="${item.role}"`);
-      expect(html).toContain(`<span class="role role--${item.role}">${item.role.toUpperCase()}</span>`);
-      expect(html).toContain(esc(item.note));
-    }
-    expect(html).toContain(`<p class="findings-summary">${esc(b.summary)}</p><figure`);
-  });
-
-  it('findings without a diagram renders no svg and no legend', () => {
-    const { diagram: _diagram, ...rest } = findings();
-    const html = renderBlock(rest, PLAN);
-
-    expect(html).not.toContain('<svg');
-    expect(html).not.toContain('class="legend"');
-    expect(html).not.toContain('<figure');
-    expect(html.match(/<li data-role="/g)?.length).toBe(rest.items.length);
-  });
-
-  it('escapes agent strings in findings rows and summary', () => {
-    const html = renderBlock(
-      findings({ summary: '<i>s</i>', items: [{ path: '<a>.ts', role: 'reuse', note: '"n" & <b>' }] }),
-      PLAN,
-    );
-
-    expect(html).not.toContain('<a>.ts');
-    expect(html).not.toContain('<i>s</i>');
-    expect(html).toContain('&lt;a&gt;.ts');
-    expect(html).toContain('&quot;n&quot; &amp; &lt;b&gt;');
   });
 });
 

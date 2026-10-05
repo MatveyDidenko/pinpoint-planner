@@ -3,7 +3,7 @@
   "title": "Refresh expired auth tokens",
   "task": "Refresh expired auth tokens without logging the user out",
   "context": {
-    "summary": "Every request goes through one fetch wrapper that adds the access token from the session store. When that token expires the API answers 401, and today the wrapper treats any 401 as a logout, so the user loses their place.",
+    "summary": "This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. This summary runs on far past the limit. ",
     "terms": [
       {
         "term": "401",
@@ -78,79 +78,6 @@
         }
       }
     ]
-  },
-  "findings": {
-    "summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "items": [
-      {
-        "path": "src/api/client.ts",
-        "role": "reuse",
-        "note": "The single fetch wrapper every request passes through, so it sees each 401 first."
-      },
-      {
-        "path": "src/auth/session.ts",
-        "role": "touch",
-        "note": "Holds the access and refresh tokens and needs a way to swap in a renewed pair."
-      },
-      {
-        "path": "src/auth/storage.ts",
-        "role": "context",
-        "note": "Persists the token pair to disk, so a renewed token must be written back here."
-      },
-      {
-        "path": "src/api/retry.ts",
-        "role": "reuse",
-        "note": "Already retries idempotent requests with backoff and can be reused for the replayed call."
-      }
-    ],
-    "diagram": {
-      "nodes": [
-        {
-          "id": "caller",
-          "label": "Call site",
-          "status": "external"
-        },
-        {
-          "id": "client",
-          "label": "Fetch wrapper",
-          "status": "reused"
-        },
-        {
-          "id": "retry",
-          "label": "Retry helper",
-          "status": "reused"
-        },
-        {
-          "id": "session",
-          "label": "Session store",
-          "status": "changed"
-        },
-        {
-          "id": "storage",
-          "label": "Token storage",
-          "status": "reused"
-        }
-      ],
-      "edges": [
-        {
-          "from": "caller",
-          "to": "client"
-        },
-        {
-          "from": "client",
-          "to": "retry"
-        },
-        {
-          "from": "client",
-          "to": "session",
-          "label": "reads token"
-        },
-        {
-          "from": "session",
-          "to": "storage"
-        }
-      ]
-    }
   },
   "options": [
     {

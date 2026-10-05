@@ -21,12 +21,11 @@ test('the fixture plan renders three diagrams, one visible card, one ribbon, the
 
   await expect(page.locator('.stage-eyebrow')).toHaveText([
     '01 · How it works today',
-    "02 · What's already here",
-    '03 · Three ways',
-    '04 · Recommended',
-    '05 · Steps',
+    '02 · Three ways',
+    '03 · Recommended',
+    '04 · Steps',
   ]);
-  await expect(page.getByTestId('stage-05')).toBeHidden();
+  await expect(page.getByTestId('stage-04')).toBeHidden();
 
   await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('tab-opt-a')).toHaveAttribute('aria-selected', 'true');

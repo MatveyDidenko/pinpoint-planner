@@ -1,5 +1,5 @@
 import type { Presence } from './presence';
-import type { ContextInput, Cost, Finding, Graph, Step } from './schema';
+import type { ContextInput, Cost, Graph, Step } from './schema';
 
 export type Letter = 'A' | 'B' | 'C' | 'D';
 
@@ -29,13 +29,6 @@ export interface ContextBlock extends BlockBase {
   summary: string;
   terms: ContextInput['terms'];
   flows: ContextInput['flows'];
-}
-
-export interface FindingsBlock extends BlockBase {
-  kind: 'findings';
-  summary: string;
-  items: Finding[];
-  diagram?: Graph;
 }
 
 export interface OptionBlock extends BlockBase {
@@ -68,7 +61,7 @@ export interface StepsBlock extends BlockBase {
   steps: Step[];
 }
 
-export type Block = ContextBlock | FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
+export type Block = ContextBlock | OptionBlock | VerdictBlock | StepsBlock;
 
 export interface Message {
   id: string;

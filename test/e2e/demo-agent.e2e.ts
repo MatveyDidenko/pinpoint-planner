@@ -123,7 +123,7 @@ test("the demo agent's answer lists the changes in the user's version", async ({
   }
 });
 
-test('choosing in the browser makes the demo agent append steps that appear in stage 05', async ({ page, request }) => {
+test('choosing in the browser makes the demo agent append steps that appear in stage 04', async ({ page, request }) => {
   const id = planId();
   await page.setViewportSize({ width: 1280, height: 900 });
   await seedPlan(request, id);
@@ -134,7 +134,7 @@ test('choosing in the browser makes the demo agent append steps that appear in s
     await page.getByTestId('choose-opt-a').click();
 
     await expect(page.locator('[data-block="steps-opt-a"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('stage-05')).toBeVisible();
+    await expect(page.getByTestId('stage-04')).toBeVisible();
     await expect(page.getByTestId('steps-link-opt-a')).toBeVisible();
     await expect.poll(agent.exitCode, { timeout: 10_000, message: agent.stderr() }).toBe(0);
   } finally {

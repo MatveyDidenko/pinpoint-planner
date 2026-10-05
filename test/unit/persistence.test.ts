@@ -76,6 +76,16 @@ describe('filePersistence', () => {
     expect(filePersistence(dir, CLOCK).load('p1')).toEqual(state);
   });
 
+  it('a plan saved with a findings block loads without it', () => {
+    const state = sampleState();
+    const findings = { id: 'findings', kind: 'findings', label: "What's already here", rev: 1, touchedAt: 1, qa: [] };
+    const legacy = { ...state, plan: { ...state.plan, blocks: [findings, ...state.plan.blocks] } };
+    mkdirSync(join(dir, 'plans'));
+    writeFileSync(join(dir, 'plans', 'p1.json'), JSON.stringify(legacy));
+
+    expect(filePersistence(dir, CLOCK).load('p1')).toEqual(state);
+  });
+
   it('a plan saved with thread ids loads unchanged', () => {
     let state = sampleState();
     state = postMessage(

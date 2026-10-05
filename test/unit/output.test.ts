@@ -82,7 +82,7 @@ describe('pollOutput', () => {
         revision: state.revision,
         presence: 'working',
         pollers: 1,
-        block_ids: ['findings'],
+        block_ids: ['context'],
       },
     });
 
@@ -406,7 +406,7 @@ describe('document shapes', () => {
           planId: ID,
           url: 'u',
           revision: 1,
-          blockIds: ['findings'],
+          blockIds: ['context'],
           droppedMessages: [],
           nextStep: 'n',
         }),

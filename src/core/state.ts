@@ -13,7 +13,6 @@ import {
   type Block,
   type ContextBlock,
   type Exchange,
-  type FindingsBlock,
   type Letter,
   type Message,
   type OptionBlock,
@@ -30,8 +29,6 @@ export function blockLabel(block: Block): string {
   switch (block.kind) {
     case 'context':
       return 'How it works today';
-    case 'findings':
-      return "What's already here";
     case 'option':
       return `Way ${block.letter} · ${block.name}`;
     case 'verdict':
@@ -46,7 +43,7 @@ export function findBlock(state: PlanState, id: string): Block | undefined {
 }
 
 export function blockDiagram(block: Block): Graph | undefined {
-  return block.kind === 'option' || block.kind === 'findings' ? block.diagram : undefined;
+  return block.kind === 'option' ? block.diagram : undefined;
 }
 
 function freshBase(revision: number) {
@@ -62,19 +59,6 @@ function deriveContext(input: ContextInput, revision: number): ContextBlock {
     summary: input.summary,
     terms: input.terms,
     flows: input.flows,
-  };
-  return { ...block, label: blockLabel(block) };
-}
-
-function deriveFindings(input: PlanInput['findings'], revision: number): FindingsBlock {
-  const block: FindingsBlock = {
-    ...freshBase(revision),
-    id: 'findings',
-    kind: 'findings',
-    label: '',
-    summary: input.summary,
-    items: input.items,
-    ...(input.diagram === undefined ? {} : { diagram: input.diagram }),
   };
   return { ...block, label: blockLabel(block) };
 }
@@ -114,11 +98,10 @@ function deriveVerdict(recommended: OptionBlock, revision: number): VerdictBlock
 }
 
 export function deriveBlocks(input: PlanInput, revision: number): Block[] {
-  const findings = deriveFindings(input.findings, revision);
   const options = input.options.map((option, i) => deriveOption(option, LETTERS[i] as Letter, revision));
   const recommended = options.find((option) => option.recommended) as OptionBlock;
   const context = input.context === undefined ? [] : [deriveContext(input.context, revision)];
-  return [...context, findings, ...options, deriveVerdict(recommended, revision)];
+  return [...context, ...options, deriveVerdict(recommended, revision)];
 }
 
 export function openPlan(input: PlanInput, now: string): PlanState {
@@ -396,9 +379,6 @@ export function appendSteps(state: PlanState, input: StepsInput, now: string): T
 function applyPatch(block: Block, input: BlockInput, revision: number): Block {
   if (input.kind === 'context' && block.kind === 'context') {
     return { ...deriveContext(input, revision), qa: block.qa };
-  }
-  if (input.kind === 'findings' && block.kind === 'findings') {
-    return { ...deriveFindings(input, revision), id: block.id, qa: block.qa };
   }
   if (input.kind === 'option' && block.kind === 'option') {
     if (input.recommended !== block.recommended)

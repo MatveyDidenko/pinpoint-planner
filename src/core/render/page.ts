@@ -84,7 +84,6 @@ export function renderPage(
 
   const sections: { title: string; inner: string; hidden?: boolean; hint?: string }[] = [
     ...(context.length > 0 ? [{ title: 'How it works today', inner: renderAll(context, s.plan.id) }] : []),
-    { title: "What's already here", inner: renderAll(ofKind('findings'), s.plan.id) },
     {
       title: WAYS_TITLE[options.length] ?? `${options.length} ways`,
       inner: `${optionTabs(options)}<div class="options">${renderAll(options, s.plan.id)}</div>`,

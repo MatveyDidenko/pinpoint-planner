@@ -54,7 +54,7 @@ describe('run read-only commands', () => {
       revision: 1,
       presence: 'waiting',
       pending_messages: 0,
-      block_ids: ['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
+      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
     });
     expect(statusDoc.next_step).toContain(`${INV} poll auth-refresh`);
 
@@ -196,7 +196,7 @@ describe('run open', () => {
       plan_id: 'auth-refresh',
       url: `${TEST_BASE_URL}/plans/auth-refresh`,
       revision: 1,
-      block_ids: ['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
+      block_ids: ['context', 'opt-a', 'opt-b', 'opt-c', 'verdict'],
       dropped_messages: [],
     });
     expect(doc.next_step).toContain(`\`${INV} poll auth-refresh\``);
@@ -311,7 +311,7 @@ describe('run agent loop commands', () => {
     t = makeTestApp();
     await seedPlan(t);
     const questionId = await postAsk('opt-b', 'what happens when the laptop sleeps?');
-    const ackId = await postAsk('findings', 'where did these findings come from?');
+    const ackId = await postAsk('context', 'where did this summary come from?');
     const answer = fixture('answer.opt-b') as { md: string; diagram: unknown };
     const stepsBody = fixture('steps.opt-a') as { steps: unknown };
     const blockBody = fixture('block.opt-b.patched');
@@ -453,7 +453,7 @@ describe('run agent loop commands', () => {
     t = makeTestApp();
     await seedPlan(t);
     const questionId = await postAsk('opt-b', 'what happens when the laptop sleeps?');
-    const ackId = await postAsk('findings', 'where did these findings come from?');
+    const ackId = await postAsk('context', 'where did this summary come from?');
     const answer = fixture('answer.opt-b');
     const contents = {
       'steps.json': JSON.stringify(fixture('steps.opt-a')),

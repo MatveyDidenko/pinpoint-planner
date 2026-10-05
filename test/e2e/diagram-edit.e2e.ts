@@ -45,11 +45,11 @@ test('Edit diagram opens the editor with the same boxes and Done editing restore
   expect(await boxes(figure)).toEqual(before);
   await expect(page.getByTestId('edit-opt-a')).toBeFocused();
 
-  await page.getByTestId('edit-findings').click();
-  await expect(page.getByTestId('editor-findings')).toBeVisible();
+  await page.getByTestId('edit-opt-a').click();
+  await expect(editor).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('editor-findings')).toHaveCount(0);
-  await expect(page.getByTestId('block-findings').locator('figure.diagram svg')).toBeVisible();
+  await expect(editor).toHaveCount(0);
+  await expect(figure.locator('svg')).toBeVisible();
 });
 
 test('clicking Edit diagram does not open the composer', async ({ page, request }) => {
