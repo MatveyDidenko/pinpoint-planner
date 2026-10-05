@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { ask, fixture, makeTestApp, readFrames, seedPlan, type TestApp } from '../helpers/test-app';
 
 const PLAN = 'auth-refresh';
-const PLAN_ORDER = ['findings', 'opt-a', 'opt-b', 'opt-c', 'verdict'];
+const PLAN_ORDER = ['context', 'findings', 'opt-a', 'opt-b', 'opt-c', 'verdict'];
 
 let t: TestApp;
 const controllers: AbortController[] = [];
@@ -71,7 +71,7 @@ describe('GET /api/plans/:id/events', () => {
     expect(frames[0]).toEqual({ event: 'hello', data: { revision: 7, presence: 'waiting', review: 'open' } });
     expect(frames.slice(1).map((f) => f.event)).toEqual(PLAN_ORDER.map(() => 'block'));
     expect(frames.slice(1).map((f) => (f.data as { blockId: string }).blockId)).toEqual(PLAN_ORDER);
-    expect(frames[3]?.data).toMatchObject({ blockId: 'opt-b', rev: 7, revision: 7 });
+    expect(frames[4]?.data).toMatchObject({ blockId: 'opt-b', rev: 7, revision: 7 });
   });
 
   test('a missing or invalid since replays every block', async () => {

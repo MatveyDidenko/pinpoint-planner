@@ -75,21 +75,25 @@ export function renderPage(
     blocks.filter((b): b is Extract<Block, { kind: K }> => b.kind === kind);
   const hasSteps = ofKind('steps').length > 0;
   const options = ofKind('option');
+  const context = ofKind('context');
 
-  const stages =
-    stage('01', "What's already here", renderAll(ofKind('findings'), s.plan.id)) +
-    stage(
-      '02',
-      WAYS_TITLE[options.length] ?? `${options.length} ways`,
-      `${optionTabs(options)}<div class="options">${renderAll(options, s.plan.id)}</div>`,
-    ) +
-    stage('03', 'The pick', renderAll(ofKind('verdict'), s.plan.id)) +
-    stage(
-      '04',
-      'Steps',
-      `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'), s.plan.id)}</div>`,
-      !hasSteps,
-    );
+  const sections: { title: string; inner: string; hidden?: boolean }[] = [
+    ...(context.length > 0 ? [{ title: 'How it works today', inner: renderAll(context, s.plan.id) }] : []),
+    { title: "What's already here", inner: renderAll(ofKind('findings'), s.plan.id) },
+    {
+      title: WAYS_TITLE[options.length] ?? `${options.length} ways`,
+      inner: `${optionTabs(options)}<div class="options">${renderAll(options, s.plan.id)}</div>`,
+    },
+    { title: 'The pick', inner: renderAll(ofKind('verdict'), s.plan.id) },
+    {
+      title: 'Steps',
+      inner: `<div class="steps-grid" id="steps-grid">${renderAll(ofKind('steps'), s.plan.id)}</div>`,
+      hidden: !hasSteps,
+    },
+  ];
+  const stages = sections
+    .map((section, i) => stage(String(i + 1).padStart(2, '0'), section.title, section.inner, section.hidden))
+    .join('');
 
   const body =
     `${header(s, opts.presence, opts.undelivered)}<main class="page" data-testid="page">${stages}` +

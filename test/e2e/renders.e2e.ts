@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   await seedPlan(request, PLAN_ID);
 });
 
-test('the fixture plan renders three diagrams, one visible card, one ribbon, the pick and four stage eyebrows', async ({
+test('the fixture plan renders three diagrams, one visible card, one ribbon, the pick and five stage eyebrows', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -20,12 +20,13 @@ test('the fixture plan renders three diagrams, one visible card, one ribbon, the
   await expect(page.locator('[data-kind="verdict"] .pick-chip')).toHaveText('Pick A');
 
   await expect(page.locator('.stage-eyebrow')).toHaveText([
-    "01 · What's already here",
-    '02 · Three ways',
-    '03 · The pick',
-    '04 · Steps',
+    '01 · How it works today',
+    "02 · What's already here",
+    '03 · Three ways',
+    '04 · The pick',
+    '05 · Steps',
   ]);
-  await expect(page.getByTestId('stage-04')).toBeHidden();
+  await expect(page.getByTestId('stage-05')).toBeHidden();
 
   await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('tab-opt-a')).toHaveAttribute('aria-selected', 'true');
@@ -43,7 +44,7 @@ test('no horizontal scroll at 390 px', async ({ page }) => {
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
       offenders: Array.from(document.querySelectorAll('body *'))
-        .filter((el) => !el.parentElement?.closest('figure.diagram, .option-tabs'))
+        .filter((el) => !el.parentElement?.closest('figure, .option-tabs'))
         .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
         .map((el) => `${el.tagName.toLowerCase()}.${el.className}`),
     }));

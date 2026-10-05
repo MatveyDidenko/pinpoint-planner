@@ -89,13 +89,13 @@ test/unit, test/http, test/cli, test/daemon, test/e2e, test/helpers, test/fixtur
 ## 4. Data model
 
 Two shapes: what the agent writes (input, validated by zod) and what the helper stores (state).
-The agent never writes HTML and never names findings, verdict or steps blocks; the server derives
+The agent never writes HTML and never names context, findings, verdict or steps blocks; the server derives
 them.
 
 ```ts
 // ---------- input ----------
 export const PLAN_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
-export const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;        // option ids; not 'findings' | 'verdict', not /^steps-/
+export const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;        // option ids; not 'context' | 'findings' | 'verdict', not /^steps-/
 export const NODE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const SENTENCE_MAX = 160; export const ANSWER_MAX = 600; export const EXCERPT_MAX = 200;
 export const OPTION_MIN = 2; export const OPTION_MAX = 4; export const MAX_NODES = 8; export const MAX_EDGES = 12;
@@ -111,14 +111,19 @@ interface Cost { effort: 'S' | 'M' | 'L'; risk: 'low' | 'medium' | 'high'; note:
 interface Step { title: string /* sentence */; touches: string[] /* ≤8 */; test: string /* sentence */ }
 
 interface FindingsInput { summary: string /* sentence */; items: Finding[] /* 1..MAX_FINDINGS */; diagram?: Graph }
+interface ContextInput {             // how the code works today, shown before the ways
+  summary: string /* 1..400 */;
+  terms: { term: string /* 1..40 */; meaning: string /* sentence */ }[] /* 0..8, every acronym and project word */;
+  flows: { name: string /* 1..60 */; steps: string[] /* 2..6 sentences */; diagram?: Graph }[] /* 1..3 */
+}
 interface OptionInput {
   id: string; name: string /* ≤60 */; pattern: string /* ≤60, what engineers call it */;
-  diagram: Graph; reuses: string[] /* ≤8 */; cost: Cost; recommended: boolean; why?: string /* sentence; required iff recommended */
+  summary: string /* 80..400, two to three sentences on how it behaves */; diagram: Graph; reuses: string[] /* ≤8 */; cost: Cost; recommended: boolean; why?: string /* sentence; required iff recommended */
 }
-interface PlanInput { id: string; title: string /* ≤80 */; task: string /* sentence */; findings: FindingsInput; options: OptionInput[] /* two to four (OPTION_MIN..OPTION_MAX), unique ids, exactly one recommended */ }
+interface PlanInput { id: string; title: string /* ≤80 */; task: string /* sentence */; context: ContextInput; findings: FindingsInput; options: OptionInput[] /* two to four (OPTION_MIN..OPTION_MAX), unique ids, exactly one recommended */ }
 interface StepsInput { optionId: string; steps: Step[] /* 1..MAX_STEPS */ }
 interface AnswerInput { questionId: string; md: string /* 1..ANSWER_MAX */; diagram?: Graph }
-type BlockInput = ({ kind: 'findings' } & FindingsInput) | ({ kind: 'option' } & OptionInput) | { kind: 'verdict'; why: string };
+type BlockInput = ({ kind: 'context' } & ContextInput) | ({ kind: 'findings' } & FindingsInput) | ({ kind: 'option' } & OptionInput) | { kind: 'verdict'; why: string };
 interface BrowserMessage {
   clientId: string /* ^[A-Za-z0-9_-]{8,64}$, browser-minted idempotency key */;
   kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
@@ -134,12 +139,13 @@ interface Exchange { id: string /* == ask message id */; threadId: string /* == 
   state: 'asked' | 'delivered' | 'answered'; answer?: { md: string; diagram?: Graph; at: string } }
 interface BlockBase { id: string; kind: Block['kind']; label: string; rev: number /* 1, +1 per touch */;
   touchedAt: number /* plan revision when last touched */; qa: Exchange[] }
+interface ContextBlock extends BlockBase { kind: 'context'; summary: string; terms: ContextInput['terms']; flows: ContextInput['flows'] }
 interface FindingsBlock extends BlockBase { kind: 'findings'; summary: string; items: Finding[]; diagram?: Graph }
-interface OptionBlock extends BlockBase { kind: 'option'; letter: 'A' | 'B' | 'C' | 'D'; name: string; pattern: string; diagram: Graph;
+interface OptionBlock extends BlockBase { kind: 'option'; letter: 'A' | 'B' | 'C' | 'D'; name: string; pattern: string; summary?: string; diagram: Graph;
   reuses: string[]; cost: Cost; recommended: boolean; why?: string; steps: { state: 'none' | 'requested' | 'ready'; blockId?: string } }
 interface VerdictBlock extends BlockBase { kind: 'verdict'; optionId: string; letter: 'A' | 'B' | 'C' | 'D'; optionName: string; why: string }
 interface StepsBlock extends BlockBase { kind: 'steps'; optionId: string; letter: 'A' | 'B' | 'C' | 'D'; optionName: string; steps: Step[] }
-type Block = FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
+type Block = ContextBlock | FindingsBlock | OptionBlock | VerdictBlock | StepsBlock;
 
 interface Message { id: string /* 'm-<n>' */; clientId: string; kind: 'ask' | 'choose' | 'done'; blockId?: string; optionId?: string;
   threadId?: string /* set on every ask */; text: string; excerpt?: string; proposal?: Graph; sketch?: true; at: string; deliveredAt?: string; ackedAt?: string }
@@ -154,9 +160,19 @@ interface PlanState {
 interface Transition { state: PlanState; touched: string[]; appended?: { blockId: string; after: string | null } }
 ```
 
-Block order is fixed: `findings`, options A–D (one letter per option, in input order), `verdict`, then `steps-<optionId>` blocks in the order
-they were appended. The page renders them under four numbered stages: 01 What's already here,
-02 Two ways / Three ways / Four ways (titled by the option count), 03 The pick, 04 Steps.
+Block order is fixed: `context`, `findings`, options A–D (one letter per option, in input order), `verdict`, then `steps-<optionId>` blocks in the order
+they were appended. The page renders them under five numbered stages: 01 How it works today,
+02 What's already here, 03 Two ways / Three ways / Four ways (titled by the option count), 04 The pick,
+05 Steps. A stored plan without a context block (saved before `context` was required) keeps the
+four-stage numbering starting at What's already here.
+
+The acronym check (`src/core/quality.ts`, `undefinedAcronyms`) runs inside `PlanInputSchema`'s
+`superRefine`, so `pinpoint open` and `PUT /api/plans/:id` both reject a plan that uses an undefined
+acronym. It scans option `name`, `pattern`, `summary` and `why`, option and flow node and edge labels,
+the context summary and every flow step for `/\b[A-Z][A-Z0-9]{1,5}s?\b/`. A token passes when it is in
+`COMMON_ACRONYMS` (API, URL, HTTP, HTTPS, JSON, UI, CLI, ID, SQL, CSS, HTML, JS, TS) or some
+`context.terms[].term` contains it, ignoring case; each miss is an issue at that field's path, such as
+`options.1.summary: define SSE in context.terms`.
 
 Threads: an ask without `threadId` starts a thread whose id is its own message id (`m-7`). An ask with
 `threadId` is a follow-up in that thread on the same block, accepted only once the thread's last
@@ -165,7 +181,7 @@ ask order; the thread is the `threadId` on each exchange.
 
 ### Derivations (`src/core/state.ts`)
 
-- `blockLabel`: findings → "What's already here"; option → "Way B · <name>"; verdict → "The pick";
+- `blockLabel`: context → "How it works today"; findings → "What's already here"; option → "Way B · <name>"; verdict → "The pick";
   steps → "Steps · Way A · <name>".
 - `pendingMessages(s)`: messages without `ackedAt`, in `at` order. This filter *is* the feedback queue.
 - `untouchedHash(plan, touched, renderBlock)`: sha16 of the rendered untouched blocks joined by `\n`
@@ -180,7 +196,7 @@ Every transition returns a new `PlanState`; untouched blocks keep their object i
 
 | Transition | Effect | Errors (`StateError.code`) |
 |---|---|---|
-| `openPlan(input, now)` | blocks `[findings, A, B, C, verdict]`, all `rev 1`, `touchedAt 1`, `revision 1`, `review 'open'` | — |
+| `openPlan(input, now)` | blocks `[context, findings, A, B, C, verdict]`, all `rev 1`, `touchedAt 1`, `revision 1`, `review 'open'` | — |
 | `replacePlan(s, input, now)` | rebuild blocks from input; carry `qa` over by matching block id; drop `steps-*` blocks; reset `option.steps` to `none`; ack pending messages whose block no longer exists and return them as `dropped`; keep `revision`, `nextMessageSeq`, `review` | — |
 | `postMessage(s, m, now)` | `ask`: push Message, push Exchange `asked` on the block with `threadId = m.threadId ?? id`, touched `[blockId]`. `choose`: option `steps.state = 'requested'`, touched `[optionId]`. `done`: `review = 'handed-back'`, touched `[]`. Same `clientId` → returns the stored message, `duplicate: true`, state unchanged (`toBe`) | `NOT_FOUND` (also a `threadId` with no exchange on that block), `BLOCK_FULL` (41st exchange), `THREAD_BUSY` (the thread's last exchange is not `answered`), `NOT_AN_OPTION`, `STEPS_EXIST` (choose when `ready`), `HANDED_BACK` (ask/choose after done) |
 | `markDelivered(s, ids, now)` | set `deliveredAt` where unset; asked exchanges → `delivered`; touched = those blocks | — |
@@ -392,13 +408,18 @@ is "the held line" (questions, waiting, agent working).
 - **Header** (sticky): eyebrow `PINPOINT`, plan title, task sentence; right: presence chip
   (`data-testid=presence`, `data-state`), "Done reviewing" (`data-action=done`,
   `data-testid=done`), theme toggle (`data-testid=theme-toggle`).
-- **Stages**: `01 · What's already here` (findings block: optional codebase-map diagram, legend,
-  rows `path · ROLE · note`), `02 · Three ways` (titled `Two ways`, `Three ways` or `Four ways` by
-  the option count; option tabs above the cards, one card visible at a time, see **Option tabs**),
-  `03 · The pick` (verdict callout: 3 px accent left border, "Pick B" chip, the why), `04 · Steps`
+- **Stages**: `01 · How it works today` (context block: the summary as a serif paragraph, the terms
+  as `<dl class="terms">` with each term in mono, then each flow as
+  `<section class="flow" data-testid="flow-<i>">` with its name, numbered steps and an optional
+  diagram with legend, marker `mk-context-<i>` and no Edit diagram button), `02 · What's already here`
+  (findings block: optional codebase-map diagram, legend, rows `path · ROLE · note`), `03 · Three ways`
+  (titled `Two ways`, `Three ways` or `Four ways` by the option count; option tabs above the cards,
+  one card visible at a time, see **Option tabs**), `04 · The pick` (verdict callout: 3 px accent left
+  border, "Pick B" chip, the why), `05 · Steps`
   (hidden until the first steps block; `repeat(auto-fit, minmax(320px, 1fr))` grid so a second
   chosen option lands beside the first).
-- **Option card**: letter badge, name, pattern tag ("what engineers call it"), diagram (reused
+- **Option card**: letter badge, name, pattern tag ("what engineers call it"), the summary as
+  `<p class="option-summary" data-testid="summary-<id>">` in the serif reading face, diagram (reused
   nodes filled `--accent-soft`, new dashed `--hold`, changed `--accent` stroke, external `--faint`),
   reuses as mono chips, cost row (effort pips 1–3 and a risk pip, both `aria-hidden`, then the words
   `<span class="cost-label" data-testid="cost-<id>">Medium effort · Low risk</span>` with S/M/L read
@@ -467,7 +488,7 @@ is "the held line" (questions, waiting, agent working).
   the editor. The thread shows the proposal as "YOUR VERSION" and the sketch as
   `<img class="sketch" alt="Your drawing" data-testid="sketch-<message>">` before the question.
 - **Choose**: posts `choose`; the card re-renders `requested`; when `append-steps` lands, the
-  `appended` frame inserts the steps block (stage 04 fades in on first use), the card re-renders
+  `appended` frame inserts the steps block (stage 05 fades in on first use), the card re-renders
   `ready`. A second choice appends another column.
 - **Presence chip**: `waiting` grey dot + "Agent not on the line" (+ "· 2 waiting"); `listening`
   accent dot with slow pulse; `working` hold dot with spinner; `handed-back` "Handed back to the
@@ -490,14 +511,18 @@ Body (numbered, imperative):
 
 1. **When**: the user asks for a plan, design or approach and more than one way exists. Do not write
    a text plan; use Pinpoint.
-2. **Look first**: read the codebase before proposing anything; collect `reuse`, `touch` and
-   `context` files with one-line notes. Never propose building what a `reuse` item already does.
+2. **Look first**: read the codebase before proposing anything. Explain how it works today first:
+   a summary, every acronym and project word in `terms`, and 1–3 current flows as steps. Collect
+   `reuse`, `touch` and `context` files with one-line notes. Never propose building what a `reuse`
+   item already does.
 3. **Draw the real ways, two to four; never pad to reach a count.** Each option has a diagram of
    ≤ 8 nodes with statuses, the pattern name, what it reuses, a cost, and exactly one
-   `recommended: true` with a one-line `why`. A diagram carries the structure; a sentence explains it.
+   `recommended: true` with a one-line `why`. Each way gets a 2–3 sentence summary; the diagram shows
+   structure, the summary says how it behaves.
    The rule carries the plan shape itself, so drawing a plan costs no `example plan` call:
-   `{id, title, task, findings:{summary, items:[{path, role, note}], diagram?}, options:[{id, name,
-   pattern, diagram:{nodes, edges}, reuses, cost:{effort, risk, note}, recommended, why?}]}` with the
+   `{id, title, task, context:{summary, terms:[{term, meaning}], flows:[{name, steps, diagram?}]},
+   findings:{summary, items:[{path, role, note}], diagram?}, options:[{id, name, pattern, summary,
+   diagram:{nodes, edges}, reuses, cost:{effort, risk, note}, recommended, why?}]}` with the
    enums spelled out. A skill test checks that every key in the plan schemas appears in this shape.
 4. **Open**: write the JSON to your scratch directory (never into the user's repo) and run
    `<inv> open <file>`. On `error`, fix per `issues` and rerun.
@@ -569,6 +594,10 @@ pins the `verify` command list and the dependency list.
 |---|---|---|---|---|
 | Plan validation (2–4 options, 1 recommended, ids, nodes, caps) | schema | plans (400 issues) | run (INVALID_INPUT, exit 1) | — |
 | Look-first findings block | render-blocks | plans (page has findings) | — | renders |
+| Context section (optional then required, reserved `context` id, context block first, summary/terms/flows rendered, How it works today as stage 01, patchable with threads kept) | schema, state, render-blocks, render-page | events (context replayed first), plans | run (block ids start with `context`) | renders (five eyebrows), visual |
+| Option summary (80..400 chars, required, carried onto the block, shown between header and diagram) | schema, state, render-blocks | — | — | visual |
+| Acronym check (undefined acronym → issue at its path, `open` and `PUT` reject) | quality, schema | — | — | — |
+| Skill asks for today's flows and terms before the ways, and a summary per way | skill | — | — | — |
 | Three diagrams, one recommended, verdict | layout, svg, render-blocks | blocks.html = renderBlock | — | renders (3 svg, 1 ribbon, verdict) |
 | Option tabs (one card shown, tab switch, keys, live swap keeps the tab, Jump switches tab), cost words | render-page, render-blocks | — | — | renders, tabs, toast |
 | Point and ask (message, pill, excerpt) | state | messages (pill html, dedupe, 404) | — | ask, keyboard-excerpt |

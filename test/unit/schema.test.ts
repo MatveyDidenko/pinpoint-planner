@@ -30,6 +30,38 @@ describe('schema', () => {
     expect(result.value.options.map((option) => option.id)).toEqual(['opt-a', 'opt-b', 'opt-c']);
   });
 
+  it('a plan with a context section parses and keeps flow order', () => {
+    const plan = load('plan.auth-refresh.json') as PlanInput;
+    const flow = (name: string) => ({ name, steps: ['The request goes out.', 'The answer comes back.'] });
+    const context = {
+      summary: 'Every request passes through one fetch wrapper.',
+      terms: [{ term: 'refresh token', meaning: 'A long-lived token that buys a new access token.' }],
+      flows: [flow('A normal request'), flow('A request with an expired token'), flow('Logging out')],
+    };
+    const result = parsePlanInput({ ...plan, context });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.context?.flows.map((f) => f.name)).toEqual([
+      'A normal request',
+      'A request with an expired token',
+      'Logging out',
+    ]);
+  });
+
+  it('a plan without a context fails on context', () => {
+    expect(issuePaths(parsePlanInput(load('invalid/plan.no-context.json')))).toContain('context');
+  });
+
+  it('an option with a missing or 40-char summary fails on that option', () => {
+    const plan = load('plan.auth-refresh.json') as PlanInput;
+    const { summary: _summary, ...bare } = plan.options[2] as PlanInput['options'][number];
+    const missing = parsePlanInput({ ...plan, options: [plan.options[0], plan.options[1], bare] });
+
+    expect(issuePaths(missing)).toContain('options.2.summary');
+    expect(issuePaths(parsePlanInput(load('invalid/plan.thin-option.json')))).toContain('options.1.summary');
+  });
+
   function planWithOptions(count: number) {
     const plan = load('plan.auth-refresh.json') as PlanInput;
     const [, , last] = plan.options;

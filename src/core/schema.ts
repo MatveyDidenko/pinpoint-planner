@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { undefinedAcronyms } from './quality';
 
 export const PLAN_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
 export const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -19,12 +20,15 @@ export const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 
 const sentence = z.string().min(1).max(SENTENCE_MAX);
 
-const isReservedBlockId = (id: string) => id === 'findings' || id === 'verdict' || id.startsWith('steps-');
+const isReservedBlockId = (id: string) =>
+  id === 'context' || id === 'findings' || id === 'verdict' || id.startsWith('steps-');
 
 const OptionIdSchema = z
   .string()
   .regex(BLOCK_ID)
-  .refine((id) => !isReservedBlockId(id), { message: 'option id must not be findings, verdict or start with steps-' });
+  .refine((id) => !isReservedBlockId(id), {
+    message: 'option id must not be context, findings, verdict or start with steps-',
+  });
 
 const StatusSchema = z.enum(['reused', 'new', 'changed', 'external']);
 
@@ -87,10 +91,26 @@ export const FindingsInputSchema = z.object({
   diagram: GraphSchema.optional(),
 });
 
+export const ContextInputSchema = z.object({
+  summary: z.string().min(1).max(400),
+  terms: z.array(z.object({ term: z.string().min(1).max(40), meaning: sentence })).max(8),
+  flows: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(60),
+        steps: z.array(sentence).min(2).max(6),
+        diagram: GraphSchema.optional(),
+      }),
+    )
+    .min(1)
+    .max(3),
+});
+
 const OptionFieldsSchema = z.object({
   id: OptionIdSchema,
   name: z.string().min(1).max(60),
   pattern: z.string().min(1).max(60),
+  summary: z.string().min(80).max(400),
   diagram: GraphSchema,
   reuses: z.array(z.string().min(1).max(120)).max(8),
   cost: CostSchema,
@@ -116,6 +136,7 @@ export const PlanInputSchema = z
     id: z.string().regex(PLAN_ID),
     title: z.string().min(1).max(80),
     task: sentence,
+    context: ContextInputSchema,
     findings: FindingsInputSchema,
     options: z.array(OptionInputSchema).min(OPTION_MIN).max(OPTION_MAX),
   })
@@ -129,6 +150,10 @@ export const PlanInputSchema = z
     });
     if (plan.options.filter((option) => option.recommended).length !== 1) {
       ctx.addIssue({ code: 'custom', path: ['options'], message: 'exactly one option must be recommended' });
+    }
+    for (const issue of undefinedAcronyms(plan)) {
+      const path = issue.path.split('.').map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment));
+      ctx.addIssue({ code: 'custom', path, message: issue.message });
     }
   });
 
@@ -144,6 +169,7 @@ export const AnswerInputSchema = z.object({
 });
 
 export const BlockInputSchema = z.discriminatedUnion('kind', [
+  ContextInputSchema.extend({ kind: z.literal('context') }),
   FindingsInputSchema.extend({ kind: z.literal('findings') }),
   OptionFieldsSchema.extend({ kind: z.literal('option') }).superRefine(requireWhyIffRecommended),
   z.object({ kind: z.literal('verdict'), why: sentence }),
@@ -191,6 +217,7 @@ export type Finding = z.infer<typeof FindingSchema>;
 export type Cost = z.infer<typeof CostSchema>;
 export type Step = z.infer<typeof StepSchema>;
 export type FindingsInput = z.infer<typeof FindingsInputSchema>;
+export type ContextInput = z.infer<typeof ContextInputSchema>;
 export type OptionInput = z.infer<typeof OptionInputSchema>;
 export type PlanInput = z.infer<typeof PlanInputSchema>;
 export type StepsInput = z.infer<typeof StepsInputSchema>;

@@ -3,6 +3,7 @@
   "id": "opt-b",
   "name": "Proactive refresh timer",
   "pattern": "Background renewal",
+  "summary": "A timer renews the access token before it expires, and a tab lock lets only one tab refresh at a time. Requests rarely meet a 401, at the cost of one more moving part.",
   "diagram": {
     "nodes": [
       { "id": "timer", "label": "Refresh timer", "status": "new" },

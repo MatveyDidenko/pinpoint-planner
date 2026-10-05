@@ -13,7 +13,15 @@ import {
   patchBlock,
   postMessage,
 } from '../../src/core/state';
-import type { Exchange, FindingsBlock, OptionBlock, PlanState, StepsBlock, VerdictBlock } from '../../src/core/types';
+import type {
+  ContextBlock,
+  Exchange,
+  FindingsBlock,
+  OptionBlock,
+  PlanState,
+  StepsBlock,
+  VerdictBlock,
+} from '../../src/core/types';
 
 function loadState(): PlanState {
   const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'plan.auth-refresh.json'), 'utf8'));
@@ -115,6 +123,18 @@ describe('renderBlock option', () => {
     expect(renderBlock(b, PLAN)).toContain('data-testid="cost-opt-c">Large effort · High risk</span>');
   });
 
+  it('an option with a summary renders it between header and diagram', () => {
+    const html = renderBlock(option('opt-b', { summary: 'A timer renews the <token> early.' }), PLAN);
+    const at = html.indexOf(
+      '<p class="option-summary" data-testid="summary-opt-b">A timer renews the &lt;token&gt; early.</p>',
+    );
+
+    expect(at).toBeGreaterThan(html.indexOf('</header>'));
+    expect(at).toBeLessThan(html.indexOf('<figure class="diagram">'));
+    const { summary: _summary, ...bare } = option('opt-b');
+    expect(renderBlock(bare, PLAN)).not.toContain('option-summary');
+  });
+
   it('renderBlock is deterministic', () => {
     const b = option('opt-a');
 
@@ -201,6 +221,45 @@ describe('renderBlock findings', () => {
     expect(html).not.toContain('<i>s</i>');
     expect(html).toContain('&lt;a&gt;.ts');
     expect(html).toContain('&quot;n&quot; &amp; &lt;b&gt;');
+  });
+});
+
+describe('renderBlock context', () => {
+  it("context renders the summary, every term and each flow's steps in order", () => {
+    const graph: Graph = { nodes: [{ id: 'wrapper', label: 'Fetch wrapper', status: 'reused' }], edges: [] };
+    const raw = JSON.parse(readFileSync(join(import.meta.dir, '..', 'fixtures', 'plan.auth-refresh.json'), 'utf8'));
+    const parsed = parsePlanInput({
+      ...raw,
+      context: {
+        summary: 'Every request <passes> through one wrapper.',
+        terms: [
+          { term: '401', meaning: 'The status the API returns for an expired token.' },
+          { term: 'refresh token', meaning: 'A long-lived token that buys a new access token.' },
+        ],
+        flows: [
+          { name: 'A normal request', steps: ['The request goes out.', 'The answer comes back.'] },
+          { name: 'An expired token', steps: ['The API says 401.', 'The user is logged out.'], diagram: graph },
+        ],
+      },
+    });
+    if (!parsed.ok) throw new Error('context plan is invalid');
+    const b = findBlock(openPlan(parsed.value, '2026-10-03T10:00:00.000Z'), 'context') as ContextBlock;
+    const html = renderBlock(b, PLAN);
+
+    expect(html).toStartWith('<section class="block block--context"');
+    expect(html).toContain('data-testid="ask-context"');
+    expect(html).toContain('<div class="qa" data-testid="qa-context"></div>');
+    expect(html).toContain('<p class="context-summary">Every request &lt;passes&gt; through one wrapper.</p>');
+    expect(html).toContain('<dl class="terms">');
+    for (const t of b.terms) expect(html).toContain(`<dt>${t.term}</dt><dd>${t.meaning}</dd>`);
+    const steps = b.flows.flatMap((f) => f.steps).map((step) => html.indexOf(`<li>${step}</li>`));
+    expect(steps.every((i) => i >= 0)).toBe(true);
+    expect([...steps].sort((x, y) => x - y)).toEqual(steps);
+    expect(html.indexOf('data-testid="flow-0"')).toBeLessThan(html.indexOf('data-testid="flow-1"'));
+    expect(html).not.toContain('id="mk-context-0"');
+    expect(html).toContain('id="mk-context-1"');
+    expect(html).toContain('class="legend"');
+    expect(html).not.toContain('data-action="edit-diagram"');
   });
 });
 

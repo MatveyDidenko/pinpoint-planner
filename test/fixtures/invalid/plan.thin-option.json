@@ -216,10 +216,10 @@
       "why": "It reuses the one place every request already passes through"
     },
     {
-      "id": "opt-a",
+      "id": "opt-b",
       "name": "Proactive refresh timer",
       "pattern": "Background renewal",
-      "summary": "A timer renews the access token shortly before it expires, so requests rarely meet a 401. The wrapper stays as it is, but the timer must cope with sleeping laptops and several open tabs.",
+      "summary": "A timer renews the token before it ends.",
       "diagram": {
         "nodes": [
           {

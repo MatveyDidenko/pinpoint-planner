@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { run } from '../../src/cli/run';
 import { createSkillMarkdown, validateSkill } from '../../src/cli/skill';
 import {
+  ContextInputSchema,
   CostSchema,
   FindingSchema,
   FindingsInputSchema,
@@ -79,6 +80,7 @@ describe('skill', () => {
     const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
     const keys = [
       PlanInputSchema,
+      ContextInputSchema,
       FindingsInputSchema,
       FindingSchema,
       OptionInputSchema,
@@ -88,6 +90,20 @@ describe('skill', () => {
 
     for (const key of keys) expect(rule3).toMatch(new RegExp(`[{,\\s]${key}[?:,}]`));
     expect(md).not.toContain('example plan');
+  });
+
+  it("the skill asks for today's flows and terms before the ways", () => {
+    const md = createSkillMarkdown({ invocation: 'pinpoint' });
+    const rule2 = md.slice(md.indexOf('\n2. '), md.indexOf('\n3. '));
+    const rule3 = md.slice(md.indexOf('\n3. '), md.indexOf('\n4. '));
+
+    expect(rule2).toContain(
+      'Explain how it works today first: a summary, every acronym and project word in `terms`, and 1–3 current flows as steps.',
+    );
+    expect(rule3).toContain(
+      'Give each way a 2–3 sentence summary; the diagram shows structure, the summary says how it behaves.',
+    );
+    expect(rule3.indexOf('context:{')).toBeLessThan(rule3.indexOf('findings:{'));
   });
 
   it('the skill routes each thread to its own subagent and keeps the main agent the only writer', () => {

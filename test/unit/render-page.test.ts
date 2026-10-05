@@ -53,13 +53,14 @@ describe('renderPage', () => {
     expect(html).toContain('id="composer"');
     expect(html).toContain('id="toast"');
 
-    for (const n of ['01', '02', '03', '04']) {
+    for (const n of ['01', '02', '03', '04', '05']) {
       expect(html).toContain(`data-stage="${n}" data-testid="stage-${n}"`);
     }
-    expect(html).toContain('01 · What&#39;s already here');
-    expect(html).toContain('02 · Three ways');
-    expect(html).toContain('03 · The pick');
-    expect(html).toContain('04 · Steps');
+    expect(html).toContain('01 · How it works today');
+    expect(html).toContain('02 · What&#39;s already here');
+    expect(html).toContain('03 · Three ways');
+    expect(html).toContain('04 · The pick');
+    expect(html).toContain('05 · Steps');
 
     const order = state.plan.blocks.map((b) => html.indexOf(`data-block="${b.id}"`));
     expect(order.every((i) => i >= 0)).toBe(true);
@@ -73,17 +74,33 @@ describe('renderPage', () => {
     });
   });
 
-  it('stage 02 is titled by the option count', () => {
-    expect(renderPage(loadState(2), assets, opts)).toContain('02 · Two ways');
-    expect(renderPage(loadState(3), assets, opts)).toContain('02 · Three ways');
-    expect(renderPage(loadState(4), assets, opts)).toContain('02 · Four ways');
+  it('a plan with a context shows How it works today as stage 01', () => {
+    const state = loadState();
+    const before = renderPage(state, assets, opts);
+    const html = renderPage(withSteps(state), assets, opts);
+
+    expect(html).toContain('01 · How it works today');
+    expect(html).toContain('02 · What&#39;s already here');
+    expect(html).toContain('03 · Three ways');
+    expect(html).toContain('04 · The pick');
+    expect(html).toContain('05 · Steps');
+    expect(html.indexOf('data-stage="01"')).toBeLessThan(html.indexOf('data-block="context"'));
+    expect(html.indexOf('data-block="context"')).toBeLessThan(html.indexOf('data-stage="02"'));
+    expect(before).toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
+    expect(html).not.toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
+  });
+
+  it('the ways stage is titled by the option count', () => {
+    expect(renderPage(loadState(2), assets, opts)).toContain('03 · Two ways');
+    expect(renderPage(loadState(3), assets, opts)).toContain('03 · Three ways');
+    expect(renderPage(loadState(4), assets, opts)).toContain('03 · Four ways');
   });
 
   function tabsOf(html: string): string[] {
     return html.match(/<button[^>]*role="tab"[^>]*>.*?<\/button>/g) ?? [];
   }
 
-  it('stage 02 renders one tab per option and shows only the recommended card', () => {
+  it('the ways stage renders one tab per option and shows only the recommended card', () => {
     const html = renderPage(loadState(), assets, opts);
     const tabs = tabsOf(html);
 
@@ -123,13 +140,13 @@ describe('renderPage', () => {
     expect(tab).toContain('>A · &lt;b&gt;&quot;x&quot;&lt;/b&gt;<');
   });
 
-  it('stage 04 is hidden until a steps block exists', () => {
+  it('the steps stage is hidden until a steps block exists', () => {
     const state = loadState();
     const before = renderPage(state, assets, opts);
     const after = renderPage(withSteps(state), assets, opts);
 
-    expect(before).toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
-    expect(after).not.toMatch(/<section class="stage"[^>]*data-stage="04"[^>]*\shidden[\s>]/);
+    expect(before).toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
+    expect(after).not.toMatch(/<section class="stage"[^>]*data-stage="05"[^>]*\shidden[\s>]/);
     expect(after).toContain('id="steps-grid"');
   });
 

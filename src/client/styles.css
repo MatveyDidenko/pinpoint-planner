@@ -421,6 +421,12 @@ button:disabled {
   padding-right: 56px;
 }
 
+.option-summary {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+}
+
 .letter {
   display: inline-flex;
   align-items: center;
@@ -908,6 +914,52 @@ figure svg,
   color: var(--muted);
 }
 
+.context-summary {
+  margin: 0;
+  font-size: 19px;
+}
+
+.terms {
+  margin: 0;
+}
+
+.terms div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.terms dt {
+  font-family: var(--mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.terms dd {
+  margin: 0;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flow-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.flow-steps {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 16px;
+}
+
 .verdict {
   display: flex;
   flex-wrap: wrap;
@@ -1379,7 +1431,8 @@ figure svg,
     right: 16px;
   }
 
-  .findings li {
+  .findings li,
+  .terms div {
     grid-template-columns: minmax(0, 1fr);
   }
 

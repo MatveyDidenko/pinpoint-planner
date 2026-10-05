@@ -1,6 +1,6 @@
 import { renderGraphSvg, renderLegend } from '../diagram/svg';
 import { renderMarkdown } from '../markdown';
-import type { Block, Exchange, FindingsBlock, OptionBlock, StepsBlock, VerdictBlock } from '../types';
+import type { Block, ContextBlock, Exchange, FindingsBlock, OptionBlock, StepsBlock, VerdictBlock } from '../types';
 import { attr, esc } from './esc';
 
 const EFFORT_PIPS = { S: 1, M: 2, L: 3 } as const;
@@ -108,6 +108,10 @@ function editButton(b: Block): string {
 function renderOption(b: OptionBlock, planId: string): string {
   const ribbon = b.recommended ? `<span class="ribbon">RECOMMENDED</span>` : '';
   const why = b.recommended && b.why !== undefined ? `<p class="why">${esc(b.why)}</p>` : '';
+  const summary =
+    b.summary === undefined
+      ? ''
+      : `<p class="option-summary" data-testid="summary-${attr(b.id)}">${esc(b.summary)}</p>`;
   const chips = b.reuses.map((r) => `<code class="chip">${esc(r)}</code>`).join('');
   const diagram = renderGraphSvg(b.diagram, { markerId: `mk-${b.id}`, ariaLabel: `${b.name} diagram` });
   const inner =
@@ -117,6 +121,7 @@ function renderOption(b: OptionBlock, planId: string): string {
     `<h3 class="option-name">${esc(b.name)}</h3>` +
     `<span class="pattern">${esc(b.pattern)}</span>` +
     `</header>` +
+    `${summary}` +
     `<figure class="diagram">${diagram}${editButton(b)}</figure>` +
     `<div class="reuses">${chips}</div>` +
     `${renderCost(b)}` +
@@ -143,6 +148,28 @@ function renderFindings(b: FindingsBlock, planId: string): string {
     .join('');
   const inner = `${diagram}<ul class="findings">${rows}</ul><p class="caption">${esc(b.summary)}</p>`;
   return blockShell(b, planId, inner);
+}
+
+function renderContext(b: ContextBlock, planId: string): string {
+  const terms =
+    b.terms.length === 0
+      ? ''
+      : `<dl class="terms">${b.terms.map((t) => `<div><dt>${esc(t.term)}</dt><dd>${esc(t.meaning)}</dd></div>`).join('')}</dl>`;
+  const flows = b.flows
+    .map((flow, i) => {
+      const diagram =
+        flow.diagram === undefined
+          ? ''
+          : `<figure class="flow-diagram">${renderGraphSvg(flow.diagram, { markerId: `mk-context-${i}`, ariaLabel: `${flow.name} diagram` })}` +
+            `${renderLegend(flow.diagram.nodes.map((n) => n.status))}</figure>`;
+      const steps = flow.steps.map((step) => `<li>${esc(step)}</li>`).join('');
+      return (
+        `<section class="flow" data-testid="flow-${i}">` +
+        `<h3 class="flow-name">${esc(flow.name)}</h3><ol class="flow-steps">${steps}</ol>${diagram}</section>`
+      );
+    })
+    .join('');
+  return blockShell(b, planId, `<p class="context-summary">${esc(b.summary)}</p>${terms}${flows}`);
 }
 
 function renderVerdict(b: VerdictBlock, planId: string): string {
@@ -177,6 +204,8 @@ function renderSteps(b: StepsBlock, planId: string): string {
 
 export function renderBlock(b: Block, planId: string): string {
   switch (b.kind) {
+    case 'context':
+      return renderContext(b, planId);
     case 'option':
       return renderOption(b, planId);
     case 'findings':

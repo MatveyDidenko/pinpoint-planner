@@ -2,6 +2,83 @@
   "id": "Bad Id",
   "title": "Refresh expired auth tokens",
   "task": "Refresh expired auth tokens without logging the user out",
+  "context": {
+    "summary": "Every request goes through one fetch wrapper that adds the access token from the session store. When that token expires the API answers 401, and today the wrapper treats any 401 as a logout, so the user loses their place.",
+    "terms": [
+      {
+        "term": "401",
+        "meaning": "The HTTP status the API returns when the access token has expired."
+      },
+      {
+        "term": "refresh token",
+        "meaning": "A long-lived token in the session store that can buy a new access token."
+      },
+      {
+        "term": "idempotent",
+        "meaning": "Safe to send twice; the retry helper only replays requests like this."
+      }
+    ],
+    "flows": [
+      {
+        "name": "A request with an expired token",
+        "steps": [
+          "A call site asks the fetch wrapper for data.",
+          "The wrapper adds the access token from the session store and sends the request.",
+          "The API answers 401 because the access token has expired.",
+          "The wrapper treats the 401 as a logout and clears the session, so the user signs in again."
+        ],
+        "diagram": {
+          "nodes": [
+            {
+              "id": "caller",
+              "label": "Call site",
+              "status": "external"
+            },
+            {
+              "id": "wrapper",
+              "label": "Fetch wrapper",
+              "status": "reused"
+            },
+            {
+              "id": "session",
+              "label": "Session store",
+              "status": "reused"
+            },
+            {
+              "id": "api",
+              "label": "API",
+              "status": "external"
+            },
+            {
+              "id": "logout",
+              "label": "Log out",
+              "status": "reused"
+            }
+          ],
+          "edges": [
+            {
+              "from": "caller",
+              "to": "wrapper"
+            },
+            {
+              "from": "wrapper",
+              "to": "session",
+              "label": "reads token"
+            },
+            {
+              "from": "wrapper",
+              "to": "api"
+            },
+            {
+              "from": "wrapper",
+              "to": "logout",
+              "label": "on 401"
+            }
+          ]
+        }
+      }
+    ]
+  },
   "findings": {
     "summary": "Every request already goes through one fetch wrapper, and the session store owns the token pair.",
     "items": [
@@ -80,6 +157,7 @@
       "id": "opt-a",
       "name": "Refresh inside the fetch wrapper",
       "pattern": "Interceptor · retry once",
+      "summary": "The fetch wrapper catches a 401, buys a new access token with the refresh token and replays the request once. Callers never see the expiry, and only one file changes.",
       "diagram": {
         "nodes": [
           {
@@ -141,6 +219,7 @@
       "id": "opt-b",
       "name": "Proactive refresh timer",
       "pattern": "Background renewal",
+      "summary": "A timer renews the access token shortly before it expires, so requests rarely meet a 401. The wrapper stays as it is, but the timer must cope with sleeping laptops and several open tabs.",
       "diagram": {
         "nodes": [
           {
@@ -206,6 +285,7 @@
       "id": "opt-c",
       "name": "Refresh at each call site",
       "pattern": "Per-call retry",
+      "summary": "Each call site wraps its request in the retry helper and refreshes the token when it sees a 401. The wrapper stays untouched, but every new call site must remember to do the same.",
       "diagram": {
         "nodes": [
           {
