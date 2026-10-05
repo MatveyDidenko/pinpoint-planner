@@ -372,24 +372,27 @@ async function rename(page: Page, box: Locator, label: string): Promise<void> {
   await expect(box).toHaveAttribute('data-node-label', label);
 }
 
-test('an edited diagram survives a reload', async ({ page, request }) => {
+test('Done editing shows the diagram as placed and it survives a reload', async ({ page, request }) => {
   const editor = await openEditor(page, request, 'reload');
   const api = editor.locator('[data-node-id="api"]');
   await rename(page, api, 'Upstream API');
   await editor.locator('[data-node-id="caller"]').focus();
   await page.keyboard.press('ArrowDown');
+  await page.getByTestId('done-editing').click();
 
+  const figure = page.getByTestId('block-opt-a').locator('figure.diagram');
+  await expect(figure.locator('[data-node-id="api"]')).toHaveAttribute('data-node-label', 'Upstream API');
+  await expect(figure.locator('[data-node-id="caller"] rect')).toHaveAttribute('y', '32');
   await page.reload();
-  await expect(editor).toHaveCount(0);
-  await expect(page.getByTestId('block-opt-a').locator('[data-node-id="api"]')).toHaveAttribute(
-    'data-node-label',
-    'API',
-  );
+  await expect(figure.locator('[data-node-id="api"]')).toHaveAttribute('data-node-label', 'Upstream API');
+  await expect(figure.locator('[data-node-id="caller"] rect')).toHaveAttribute('y', '32');
   await page.getByTestId('edit-opt-a').click();
   await expect(api).toHaveAttribute('data-node-label', 'Upstream API');
   await expect(editor.locator('[data-node-id="caller"] rect')).toHaveAttribute('y', '32');
 
   await page.getByTestId('reset-diagram').click();
+  await page.getByTestId('done-editing').click();
+  await expect(figure.locator('[data-node-id="api"]')).toHaveAttribute('data-node-label', 'API');
   await page.reload();
   await page.getByTestId('edit-opt-a').click();
   await expect(api).toHaveAttribute('data-node-label', 'API');

@@ -510,8 +510,10 @@ is "the held line" (questions, waiting, agent working).
   arrow and stroke limits. Boxes drag, move with the arrow keys (Shift for 32 px), rename on
   double-click or Enter, cycle status with S, connect from a handle or with C then Enter, and delete
   with Delete; boxes and handles carry invisible 44 px tap areas beneath them. The graph is kept per
-  plan+block in sessionStorage with the diagram it was edited from, dropped on open once the agent's
-  diagram differs, and survives a live swap of the block. Draw turns pointer strokes into
+  plan+block in sessionStorage with the diagram it was edited from, dropped once the agent's
+  diagram differs, and survives a live swap of the block. Done editing, Esc and a reload show the edited
+  graph in the figure exactly as placed, legend included; Reset, an unchanged graph or a sent proposal
+  bring back the agent's. Draw turns pointer strokes into
   `<polyline class="mark">` in `--mark` (#c8102e light, #ff6b81 dark, clear of the amber `--hold`
   that means waiting), at most 200 points a stroke and 50 strokes; while Draw is on, boxes do not drag
   or rename. Strokes survive a live swap but not Done editing or a reload. Ask about my version opens

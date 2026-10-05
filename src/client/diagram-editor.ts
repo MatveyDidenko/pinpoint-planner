@@ -1,6 +1,6 @@
 import { diffGraphs } from '../core/diagram/diff';
 import { NODE_H, round1 } from '../core/diagram/layout';
-import { STATUS_ORDER } from '../core/diagram/svg';
+import { renderLegend, STATUS_ORDER } from '../core/diagram/svg';
 import type { Graph } from '../core/schema';
 import { clearDiagram, loadDiagram, saveDiagram } from './draft';
 import {
@@ -84,6 +84,7 @@ const ARROW_STEPS: Record<string, [number, number]> = {
 
 let planId = '';
 let active: Editor | null = null;
+const agentSvgs = new WeakMap<Element, SVGSVGElement>();
 
 const numberAttr = (el: Element | null, name: string) => Number(el?.getAttribute(name) ?? 0);
 
@@ -109,6 +110,33 @@ function readGraph(svg: Element): EditGraph {
     };
   });
   return { nodes, edges };
+}
+
+const agentSvgOf = (figure: Element) => agentSvgs.get(figure) ?? figure.querySelector('svg');
+
+/** Shows `graph` in `figure` exactly as placed, or the agent's own diagram when there is none or it matches the agent's. */
+function showInFigure(figure: Element, blockId: string, graph: EditGraph | null): void {
+  const shown = figure.querySelector('svg');
+  const agent = agentSvgOf(figure);
+  if (shown === null || agent === null) return;
+  agentSvgs.set(figure, agent);
+  const agentGraph = readGraph(agent);
+  const placed = graph !== null && JSON.stringify(graph) !== JSON.stringify(agentGraph) ? graph : null;
+  if (placed !== null) {
+    shown.outerHTML = renderEditableSvg(placed, `mk-edit-${blockId}`, agent.getAttribute('aria-label') ?? 'Diagram');
+  } else if (shown !== agent) {
+    shown.replaceWith(agent);
+  }
+  const legend = figure.querySelector('.legend');
+  if (legend !== null) legend.outerHTML = renderLegend((placed ?? agentGraph).nodes.map((n) => n.status));
+}
+
+function showSaved(figure: Element): void {
+  const blockId = figure.closest<HTMLElement>('[data-block]')?.dataset.block;
+  const svg = figure.querySelector('svg');
+  if (blockId === undefined || svg === null) return;
+  const saved = loadDiagram(planId, blockId, readGraph(svg));
+  if (saved !== null) showInFigure(figure, blockId, saved);
 }
 
 function moveNode(g: EditGraph, id: string, x: number, y: number): EditGraph {
@@ -454,17 +482,19 @@ function onKey(editor: Editor, event: KeyboardEvent): void {
 
 export function closeEditor(restoreFocus: boolean): void {
   if (active === null) return;
-  const { root, figure } = active;
+  const { root, figure, blockId, graph } = active;
   active = null;
   root.replaceWith(figure);
+  showInFigure(figure, blockId, graph);
   document.dispatchEvent(new CustomEvent(DIAGRAM_CHANGED_EVENT));
   if (restoreFocus) figure.querySelector<HTMLElement>('[data-action="edit-diagram"]')?.focus();
 }
 
 function open(figure: Element, kept?: Editor): void {
   const blockId = figure.closest<HTMLElement>('[data-block]')?.dataset.block;
-  const svg = figure.querySelector('svg');
-  if (blockId === undefined || svg === null) return;
+  const shown = figure.querySelector('svg');
+  const agent = agentSvgOf(figure);
+  if (blockId === undefined || shown === null || agent === null) return;
   closeEditor(false);
 
   const root = document.createElement('div');
@@ -477,8 +507,8 @@ function open(figure: Element, kept?: Editor): void {
   const canvas = root.querySelector<HTMLElement>('.editor-canvas');
   if (canvas === null) return;
 
-  const snapshot = readGraph(svg);
-  const graph = kept?.graph ?? loadDiagram(planId, blockId, snapshot) ?? snapshot;
+  const snapshot = readGraph(agent);
+  const graph = kept?.graph ?? readGraph(shown);
   const editor: Editor = {
     blockId,
     figure,
@@ -636,11 +666,14 @@ export async function editedSketch(blockId: string): Promise<string | null> {
 
 export function finishProposal(blockId: string): void {
   clearDiagram(planId, blockId);
-  if (active?.blockId === blockId) closeEditor(false);
+  if (active?.blockId !== blockId) return;
+  active.graph = active.snapshot;
+  closeEditor(false);
 }
 
 export function initDiagramEditor(forPlan: string): void {
   planId = forPlan;
+  for (const figure of Array.from(document.querySelectorAll('[data-block] figure.diagram'))) showSaved(figure);
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
     const figure = event.target.closest('[data-action="edit-diagram"]')?.closest('figure.diagram');
@@ -649,8 +682,9 @@ export function initDiagramEditor(forPlan: string): void {
 
   document.addEventListener(SWAPPED_EVENT, (event) => {
     const { blockId } = (event as CustomEvent<{ blockId: string }>).detail;
-    if (active === null || active.blockId !== blockId || active.root.isConnected) return;
     const figure = document.querySelector(`[data-block="${CSS.escape(blockId)}"] figure.diagram`);
-    if (figure !== null) open(figure, active);
+    if (figure === null) return;
+    if (active?.blockId !== blockId) showSaved(figure);
+    else if (!active.root.isConnected) open(figure, active);
   });
 }

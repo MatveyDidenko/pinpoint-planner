@@ -80,7 +80,8 @@ export function cycleStatus(g: EditGraph, id: string): EditGraph {
   return updateNode(g, id, (node) => ({ ...node, status: next(node.status) }));
 }
 
-export function renderEditableSvg(g: EditGraph, markerId: string): string {
+/** Draws boxes where they were placed: focusable for the editor, or a static image when given an `ariaLabel`. */
+export function renderEditableSvg(g: EditGraph, markerId: string, ariaLabel?: string): string {
   const edges: GraphLayout['edges'] = g.edges.map((edge) => {
     const from = g.nodes.find((node) => node.id === edge.from);
     const to = g.nodes.find((node) => node.id === edge.to);
@@ -97,5 +98,6 @@ export function renderEditableSvg(g: EditGraph, markerId: string): string {
   const width = round1(Math.max(0, ...g.nodes.map((node) => node.x + node.w)) + PAD);
   const height = round1(Math.max(0, ...g.nodes.map((node) => node.y + NODE_H)) + PAD - top);
   const nodes = g.nodes.map((node) => ({ ...node, h: NODE_H, layer: 0 }));
-  return renderLayoutSvg({ top, width, height, nodes, edges }, { markerId, focusable: true });
+  const opts = ariaLabel === undefined ? { markerId, focusable: true } : { markerId, ariaLabel };
+  return renderLayoutSvg({ top, width, height, nodes, edges }, opts);
 }
