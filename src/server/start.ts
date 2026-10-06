@@ -73,8 +73,10 @@ export async function startServer(o: StartOptions): Promise<RunningServer> {
   const close = (): Promise<void> => {
     closing ??= (async () => {
       watch?.close();
+      // Bun spins at full CPU if this forced stop starts after app.close() with a poll and an SSE stream open.
+      const stopped = server.stop(true);
       app.close();
-      await server.stop(true);
+      await stopped;
       closed.resolve();
     })();
     return closing;
