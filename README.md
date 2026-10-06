@@ -1,81 +1,99 @@
 # Pinpoint
 
-Pinpoint turns "plan this change" into a web page of labelled blocks instead of a wall of text. The agent (Claude Code) reads the codebase first, draws three ways to do the job, marks one as recommended, and opens the page in your browser.
+When you ask Claude Code for a plan, Pinpoint opens it as a page in your browser instead of a wall of text: the goal, how the code works today, two to four ways to build it (each with a diagram, a cost and one marked recommended), and the risks and open questions.
 
-You point at any block and ask a question or choose an option. The agent stays on the line through `pinpoint watch`, a long-poll loop to a small helper server on your laptop that Claude Code's Monitor tool turns into chat events, answers that block only, and everything else on the page stays byte-identical. Nothing leaves the machine: fonts, scripts and styles are served from `127.0.0.1`. The full design is in [docs/design.md](docs/design.md).
+Click any part of the page to ask about it. Claude answers on that card only and the rest of the page stays as it was. Everything runs on your machine.
 
-## Install
+## Use it in Claude Code
 
-Bun is pinned in `mise.toml`. If mise is not activated in your shell, prefix every `bun` command below with `mise x --`.
+You need [Bun](https://bun.sh) 1.3 or newer (or run `mise install` in this folder).
+
+**1. Clone and install**
 
 ```sh
-mise install
+git clone https://github.com/MatveyDidenko/pinpoint-planner.git
+cd pinpoint-planner
 bun install
-bun run setup:e2e   # Chromium for the Playwright suite
 ```
 
-Install the Claude Code skill so the agent knows when and how to use Pinpoint:
+**2. Install the skill**
 
 ```sh
 bun bin/pinpoint.ts skill --install
 ```
 
-This writes `~/.claude/skills/pinpoint/SKILL.md` with this checkout's absolute invocation baked in, so Claude Code does not prompt for each command.
+This writes `~/.claude/skills/pinpoint/SKILL.md`, so every Claude Code session can use Pinpoint. The file points at this folder, so run the command again if you move the folder, update Bun, or pull new changes.
 
-## The agent loop
+**3. Ask for a plan**
 
-1. `pinpoint example plan` prints the plan shape; the agent fills it with three options after reading the code.
-2. `pinpoint open <file>` validates the plan, starts the helper if needed and opens the browser.
-3. `pinpoint watch <plan-id>` runs under Claude Code's Monitor tool and prints one JSON line per batch of browser messages, so each ask or choose wakes the agent with the message already in hand. It exits on hand-back or a closed tab; `pinpoint poll` is the single-shot version.
-4. The agent answers with `answer`, `append-steps` or `patch-block`, then ends its turn; the watch keeps listening.
-5. Every command prints one JSON document whose `next_step` says what to run next.
+Start a new Claude Code session in any project and ask for a plan:
 
-`pinpoint help` lists every command. The CLI entry is `bin/pinpoint.ts`; run it as `bun bin/pinpoint.ts <cmd>`, or as `pinpoint <cmd>` once linked.
+```
+use pinpoint to plan adding token refresh to the API client
+```
 
-## Environment variables
+or type `/pinpoint` followed by the request. Claude reads the code, writes the plan and opens it in your browser. The first time, Claude Code may ask to allow the Monitor tool; that is how Claude hears your clicks, so allow it.
+
+**4. Work through the page**
+
+- Click a card, or select text in it, to ask about it. Click a `GUESS` step or a `QUESTION` to answer it.
+- Press **Edit diagram** to move or change boxes, then **Ask about my version**.
+- Press **Choose this way** and Claude writes the step-by-step list for it.
+- Press **Hand back to agent** when you are done; Claude carries on in the chat with what you chose.
+
+## How it works
+
+```mermaid
+flowchart LR
+    Claude["Claude<br/>(main session)"]
+    Sub["Fresh Sonnet subagent<br/>(one per conversation thread)"]
+    Watch["pinpoint watch<br/>(started once with Monitor)"]
+    Helper["Helper server<br/>localhost:4777"]
+    Browser["Your browser"]
+
+    Claude -- "pinpoint open" --> Helper
+    Helper -- "the plan page" --> Browser
+    Browser -- "your question" --> Helper
+    Helper -- "new message" --> Watch
+    Watch -- "chat event" --> Claude
+    Claude -- "question + that one section" --> Sub
+    Sub -- "the answer" --> Claude
+    Claude -- "pinpoint answer" --> Helper
+    Helper -- "the answer" --> Browser
+```
+
+- `pinpoint open` starts the helper if it is not running. The helper is one small server on `127.0.0.1:4777` that serves the page, saves plans in `~/.pinpoint` and stops after 30 idle minutes.
+- `pinpoint watch` prints one line for each thing you do in the page, and Claude Code turns each line into a message for Claude.
+- Claude replies with `pinpoint answer`, `append-steps` or `patch-block`, which change one card only.
+
+The full design is in [docs/design.md](docs/design.md).
+
+## Develop
+
+In the commands below, `pinpoint` means `bun bin/pinpoint.ts`.
+
+```sh
+bun test                # unit, http and cli tests, with a 90% coverage gate
+bun run setup:e2e       # once: installs Chromium for the browser tests
+bun run test:e2e        # browser tests; the visual baselines only match on macOS
+bun run verify          # lint, typecheck, tests, skill check and browser tests
+```
+
+Try the page without Claude:
+
+```sh
+bun run demo                          # opens a sample plan
+bun run demo:agent -- auth-refresh    # in a second terminal: a scripted agent answers you
+```
+
+The helper that `pinpoint open` starts keeps running the code it started with. After editing, run `pinpoint stop` so the next command starts a fresh one, or run `bun run dev` to keep a helper in the foreground that restarts on save. If anything misbehaves, read `~/.pinpoint/helper.log`.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PINPOINT_PORT` | `4777` | Helper port on 127.0.0.1 |
-| `PINPOINT_STATE_DIR` | `~/.pinpoint` | Plans and `helper.log` |
+| `PINPOINT_STATE_DIR` | `~/.pinpoint` | Saved plans and `helper.log` |
 | `PINPOINT_NO_OPEN` | unset | `1` skips opening the browser |
-| `PINPOINT_IDLE_TIMEOUT_MS` | `1800000` | Helper exits after this long with no activity |
-| `PINPOINT_POLL_MAX_WAIT_MS` | `1500000` | Longest a single poll waits |
-| `PINPOINT_BROWSER_GRACE_MS` | `90000` | How long a poll tolerates a missing browser tab |
-| `PINPOINT_INVOCATION` | detected | Command prefix printed in `next_step` |
-
-If the helper misbehaves, read `<state dir>/helper.log`.
-
-## Tests
-
-| Level | Proves | Command |
-|---|---|---|
-| L0 static | types and style | `bun run typecheck && bun run check` |
-| L1 unit | every pure module | `bun run test:unit` |
-| L2 http | every route, in-process | `bun run test:http` |
-| L3 socket | heartbeat bytes, abort, idle shutdown | `bun test test/http/socket.test.ts` |
-| L4 cli | every subcommand's JSON and exit code | `bun run test:cli` |
-| L5 subprocess and daemon | one JSON document on real stdout, detached spawn | `bun test test/cli/subprocess.test.ts`, `bun run test:daemon` |
-| L6 browser | DOM glue, offline, keyboard, visual | `bun run test:e2e` |
-
-`bun test` runs L1 to L5 with no network and no browser and enforces 90% line and function coverage. The full matrix is in [docs/design.md section 8](docs/design.md#8-testing-strategy).
-
-`bun run verify` runs check, typecheck, `bun test --coverage`, `skill --check` and e2e in order. The visual baselines are macOS-specific (`-darwin` suffix), so the visual spec only passes on macOS.
-
-## Demo
-
-```sh
-bun run demo                          # opens the auth-refresh plan in the browser
-bun run demo:agent -- auth-refresh    # in a second terminal: a scripted agent answers asks and choices
-```
-
-Ask a question or choose an option in the browser and the scripted agent replies through the real CLI.
-
-## Dev loop
-
-```sh
-bun run dev        # helper in the foreground, restarted by bun --watch
-pinpoint stop      # after edits, so the next command spawns a fresh helper
-```
-
-The detached helper that `pinpoint open` starts keeps running the code it started with; `pinpoint stop` makes the next command spawn one from your edits.
+| `PINPOINT_IDLE_TIMEOUT_MS` | `1800000` | Helper stops after this long with nothing to do |
+| `PINPOINT_POLL_MAX_WAIT_MS` | `1500000` | Longest one wait on the helper lasts |
+| `PINPOINT_BROWSER_GRACE_MS` | `90000` | How long a closed tab is tolerated |
+| `PINPOINT_INVOCATION` | detected | Command prefix written into the skill and `next_step` |
