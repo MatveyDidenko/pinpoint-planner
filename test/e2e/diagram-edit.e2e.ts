@@ -97,6 +97,40 @@ test('dragging a box moves it and its arrows follow', async ({ page, request }) 
   await expect(editor.locator('path.edge[data-from="wrapper"][data-to="api"]')).toHaveAttribute('d', / 414 133$/);
 });
 
+test('right-dragging pans the whiteboard without moving boxes, and the pan survives an edit', async ({
+  page,
+  request,
+}) => {
+  const editor = await openEditor(page, request, 'pan');
+  const svg = editor.locator('svg');
+  const rect = editor.locator('[data-node-id="api"] rect');
+  const start = await svg.boundingBox();
+  const shift = async () => {
+    const now = await svg.boundingBox();
+    if (start === null || now === null) throw new Error('svg has no box');
+    return [Math.round(now.x - start.x), Math.round(now.y - start.y)];
+  };
+  const from = await centre(editor.locator('.editor-canvas'));
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(from.x + 60, from.y + 30, { steps: 5 });
+  await page.mouse.up({ button: 'right' });
+
+  expect(await shift()).toEqual([60, 30]);
+  await expect(rect).toHaveAttribute('x', '334');
+  await expect(rect).toHaveAttribute('y', '76');
+
+  const box = await centre(rect);
+  await page.mouse.move(box.x, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 80, box.y + 40, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(rect).toHaveAttribute('x', '414');
+  expect(await shift()).toEqual([60, 30]);
+});
+
 test('arrow keys move the focused box and it cannot leave the canvas', async ({ page, request }) => {
   const editor = await openEditor(page, request, 'keys');
   const caller = editor.locator('[data-node-id="caller"]');

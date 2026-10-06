@@ -36,6 +36,7 @@ type Editor = {
   connectFrom: string | null;
   strokes: Stroke[];
   drawing: boolean;
+  pan: [number, number];
 };
 
 const TOOLBAR =
@@ -270,12 +271,19 @@ function select(editor: Editor, sel: Selection | null): void {
   sync(editor);
 }
 
+function applyPan(editor: Editor): void {
+  const svg = editor.canvas.querySelector('svg');
+  const [x, y] = editor.pan;
+  if (svg !== null) svg.style.transform = x === 0 && y === 0 ? '' : `translate(${x}px, ${y}px)`;
+}
+
 function render(editor: Editor): void {
   const focused = editor.canvas.contains(document.activeElement) ? selectionOf(document.activeElement) : null;
   editor.canvas.querySelector('svg')?.remove();
   editor.canvas.insertAdjacentHTML('afterbegin', renderEditableSvg(editor.graph, `mk-edit-${editor.blockId}`));
   addHitTargets(editor);
   editor.canvas.querySelector('svg')?.append(...editor.strokes.map(markEl));
+  applyPan(editor);
   if (focused !== null) focusTarget(editor, focused)?.focus();
   sync(editor);
 }
@@ -405,6 +413,25 @@ function startDrag(editor: Editor, event: PointerEvent): void {
   document.addEventListener('pointercancel', end);
 }
 
+function startPan(editor: Editor, event: PointerEvent): void {
+  event.preventDefault();
+  const [x0, y0] = editor.pan;
+  editor.canvas.toggleAttribute('data-panning', true);
+  const move = (e: PointerEvent) => {
+    editor.pan = [x0 + e.clientX - event.clientX, y0 + e.clientY - event.clientY];
+    applyPan(editor);
+  };
+  const end = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', end);
+    document.removeEventListener('pointercancel', end);
+    editor.canvas.removeAttribute('data-panning');
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+}
+
 function strokesChanged(editor: Editor): void {
   render(editor);
   document.dispatchEvent(new CustomEvent(DIAGRAM_CHANGED_EVENT));
@@ -522,6 +549,7 @@ function open(figure: Element, kept?: Editor): void {
     connectFrom: null,
     strokes: kept?.strokes ?? [],
     drawing: kept?.drawing ?? false,
+    pan: kept?.pan ?? [0, 0],
   };
   active = editor;
   render(editor);
@@ -568,13 +596,19 @@ function open(figure: Element, kept?: Editor): void {
     else sync(editor);
   });
   root.addEventListener('focusout', () => sync(editor));
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('mousedown', (event) => {
-    const id = event.target instanceof Element ? event.target.getAttribute('data-hit-node') : null;
+    const id =
+      event.button === 0 && event.target instanceof Element ? event.target.getAttribute('data-hit-node') : null;
     if (id === null) return;
     event.preventDefault();
     nodeEl(editor, id)?.focus();
   });
   canvas.addEventListener('pointerdown', (event) => {
+    if (event.button === 2) {
+      startPan(editor, event);
+      return;
+    }
     if (editor.drawing) {
       startStroke(editor, event);
       return;

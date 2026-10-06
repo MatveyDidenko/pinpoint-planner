@@ -522,7 +522,9 @@ is "the held line" (questions, waiting, agent working).
   (`editor-note`); every control is 44 px tall. The note reads "Enter rename · S status · C connect ·
   Delete remove · arrows move" while a box has focus and Draw is off, and gives way to the connect
   prompt ("Connecting from <box>: click a box, or focus one and press Enter. Esc cancels") and to the
-  arrow and stroke limits. Boxes drag, move with the arrow keys (Shift for 32 px), rename on
+  arrow and stroke limits. Right-dragging anywhere on the canvas pans the view (a CSS translate on the
+  SVG, kept across re-renders and live swaps, reset on the next open) and the context menu is
+  suppressed there. Boxes drag, move with the arrow keys (Shift for 32 px), rename on
   double-click or Enter, cycle status with S, connect from a handle or with C then Enter, and delete
   with Delete; boxes and handles carry invisible 44 px tap areas beneath them. The graph is kept per
   plan+block in sessionStorage with the diagram it was edited from, dropped once the agent's

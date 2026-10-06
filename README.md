@@ -37,7 +37,7 @@ or type `/pinpoint` followed by the request. Claude reads the code, writes the p
 **4. Work through the page**
 
 - Click a card, or select text in it, to ask about it. Click a `GUESS` step or a `QUESTION` to answer it.
-- Press **Edit diagram** to move or change boxes, then **Ask about my version**.
+- Press **Edit diagram** to move or change boxes (right-drag to move around the whiteboard), then **Ask about my version**.
 - Press **Choose this way** and Claude writes the step-by-step list for it.
 - Press **Hand back to agent** when you are done; Claude carries on in the chat with what you chose.
 

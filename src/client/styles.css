@@ -799,6 +799,11 @@ figure svg,
   user-select: none;
 }
 
+.editor-canvas[data-panning],
+.editor-canvas[data-panning] * {
+  cursor: grabbing;
+}
+
 .editor-canvas svg {
   display: block;
   max-width: none;
